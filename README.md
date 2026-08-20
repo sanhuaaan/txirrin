@@ -276,7 +276,7 @@ Cuando haya histórico y pregunta que lo justifique:
 ## 15. Fases
 
 ```text
-1. Ingestión         → "Consigo datos de Dbizi y construyo histórico"   ← EMPEZAR YA (sin histórico previo, cada día cuenta)
+1. Ingestión         → "Consigo datos de Dbizi y construyo histórico"   ← EN MARCHA: git-scraping desde 2026-08-20 (ver infraestructura.md)
 2. Observación       → "Veo cómo se comporta la red"
 3. Contextualización → "Incorporo meteorología y calendario"
 4. Explicación       → "Incorporo eventos e incidencias"
