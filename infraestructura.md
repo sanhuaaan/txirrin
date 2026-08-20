@@ -8,6 +8,12 @@ Sin servidor, coste cero: el repo público [`sanhuaaan/dbizi-raw`](https://githu
 
 - Repo **público** a propósito: en privados los runners consumen los 2000 min/mes gratis en días; en públicos son ilimitados. El dato de Dbizi ya es público.
 - Limitaciones: cron con jitter (retrasos de minutos, ticks perdidos ocasionales), mínimo 5 min. Vale para agregados horarios; para inferencia fina de flujos, no.
+- **Disparador principal: cron-job.org** (activo desde 2026-08-20, verificado): el cron nativo de Actions es best-effort (tardó ~30 min en arrancar y salta ticks; ya visto en otro proyecto), así que el disparo fiable viene de [cron-job.org](https://cron-job.org) cada 5 min vía `workflow_dispatch`, con el `schedule` nativo como redundancia:
+  - URL: `POST https://api.github.com/repos/sanhuaaan/dbizi-raw/actions/workflows/scrape.yml/dispatches`
+  - Headers: `Authorization: Bearer <PAT>` · `Accept: application/vnd.github+json`
+  - Body: `{"ref":"main"}`
+  - PAT fine-grained solo con permiso **Actions: write** sobre `dbizi-raw` (se crea en github.com → Settings → Developer settings → Fine-grained tokens).
+  - El `schedule` se deja como redundancia: `concurrency` + "commit only if changed" hacen inocuos los disparos duplicados.
 - Cuando exista la VM: backfill del historial de git a Postgres y el scraper queda como redundancia (o se apaga).
 
 ## Alternativas de VM
