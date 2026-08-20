@@ -8,12 +8,13 @@ Sin servidor, coste cero: el repo público [`sanhuaaan/dbizi-raw`](https://githu
 
 - Repo **público** a propósito: en privados los runners consumen los 2000 min/mes gratis en días; en públicos son ilimitados. El dato de Dbizi ya es público.
 - Limitaciones: cron con jitter (retrasos de minutos, ticks perdidos ocasionales), mínimo 5 min. Vale para agregados horarios; para inferencia fina de flujos, no.
-- **Disparador principal: cron-job.org** (activo desde 2026-08-20, verificado): el cron nativo de Actions es best-effort (tardó ~30 min en arrancar y salta ticks; ya visto en otro proyecto), así que el disparo fiable viene de [cron-job.org](https://cron-job.org) cada 5 min vía `workflow_dispatch`, con el `schedule` nativo como redundancia:
+- **Disparador único: cron-job.org** (activo desde 2026-08-20, verificado): el cron nativo de Actions es best-effort (tardó ~30 min en arrancar y salta ticks; ya visto en otro proyecto), así que el disparo viene de [cron-job.org](https://cron-job.org) cada 5 min vía `workflow_dispatch`:
   - URL: `POST https://api.github.com/repos/sanhuaaan/dbizi-raw/actions/workflows/scrape.yml/dispatches`
   - Headers: `Authorization: Bearer <PAT>` · `Accept: application/vnd.github+json`
   - Body: `{"ref":"main"}`
   - PAT fine-grained solo con permiso **Actions: write** sobre `dbizi-raw` (se crea en github.com → Settings → Developer settings → Fine-grained tokens).
-  - El `schedule` se deja como redundancia: `concurrency` + "commit only if changed" hacen inocuos los disparos duplicados.
+  - El `schedule` nativo **se eliminó el 2026-08-20**, tras medir que no aportaba: en las 3,4 h previas todos los ticks útiles llegaron por `workflow_dispatch` (mediana 5,0 min, 98% de cobertura) y el único run lanzado por `schedule` falló al colisionar con el dispatch 5 s anterior. Para reactivarlo, devolver el bloque `schedule` a `.github/workflows/scrape.yml`.
+  - ⚠️ **Contrapartida**: cron-job.org pasa a ser punto único de fallo y su caída es silenciosa — si el PAT caduca o el servicio cae, la captura se detiene sin aviso y solo se detecta como hueco en el histórico. Mitigación pendiente: alerta si el último commit de `dbizi-raw` supera los ~20 min de antigüedad.
 - Cuando exista la VM: backfill del historial de git a Postgres y el scraper queda como redundancia (o se apaga).
 
 ## Alternativas de VM
