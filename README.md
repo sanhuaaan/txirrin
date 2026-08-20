@@ -18,13 +18,15 @@ No es una plataforma institucional ni un producto comercial. Donostia es el labo
 
 ## Fuentes de datos
 
-| Fuente | Datos | URL |
-|--------|-------|-----|
-| 🚗 Open Data Euskadi | Tráfico: aforos, intensidad, velocidad, incidencias | <https://opendata.euskadi.eus/> |
-| 🌧️ Euskalmet | Meteo: precipitación, temperatura, viento… (con histórico en Open Data Euskadi) | <https://www.euskalmet.euskadi.eus/> |
-| 🅿️ Open Data Donostia | Aparcamientos (estático seguro; dinámico por confirmar) | <https://www.donostia.eus/datosabiertos/> |
-| 🚲 Dbizi | Bici pública: estaciones, disponibilidad. **Comprobar si expone GBFS** | <https://www.dbizi.eus/> |
-| 📅 Calendario | Festivos de Gipuzkoa: tabla rellenada a mano (~14 filas/año) | — |
+Validadas el 2026-08-20 con llamadas reales — detalle y evidencia en [`fase-0-fuentes.md`](fase-0-fuentes.md).
+
+| Fuente | Veredicto | Datos |
+|--------|-----------|-------|
+| 🚲 Dbizi | ✅ GBFS oficial sin auth (PBSC), TTL ~30 s | 70 estaciones, bicis/anclajes, eléctrica vs. mecánica. Sin histórico → collector |
+| 🅿️ Donostia parkings | ✅ Dinámico: `getParkings.xsp` (sin key) | 16 subterráneos con plazas libres en vivo + CKAN estático (OTA, disuasorios, barrios, viales) |
+| 🌧️ Euskalmet | ✅ Histórico 10-min desde 2003 (zips) + API con key gratuita | En Donostia, precipitación solo en **C017 Miramón** (desde ~2010) |
+| 🚗 Tráfico Euskadi | ❌ Muerta para Donostia | 187 sensores urbanos sin datos jamás; GI-20 cortó en nov-2024. Vivo: incidencias y cámaras. Alternativa: aforos DFG 2020–2025 (accesos, no urbano) |
+| 📅 Calendario | Tabla a mano (~14 filas/año) | Festivos de Gipuzkoa |
 
 Extensiones posibles (no ahora): eventos (Anoeta, Kursaal), incidencias, transporte público, calidad del aire.
 
@@ -43,32 +45,27 @@ Recortes deliberados de sobre-ingeniería. Cada uno tiene su condición de reape
 
 ---
 
-## Fase 0 — validar las fuentes (una tarde)
+## Fase 0 — validar las fuentes ✅ HECHA (2026-08-20)
 
-Todo el proyecto depende de qué publique realmente Open Data Euskadi para Donostia. Antes de modelar nada:
-
-1. Script que pegue a la API de tráfico y vuelque el JSON crudo.
-   - ¿Hay aforos urbanos o solo carreteras forales / N-1?
-   - ¿Hay histórico o solo estado actual?
-   - ¿Granularidad temporal? ¿Coordenadas de sensores?
-2. Lo mismo con Euskalmet (el histórico existe en Open Data Euskadi — pata resuelta).
-3. Comprobar si Dbizi expone feed GBFS. Si sí, **Dbizi + lluvia puede ser mejor primer MVP que tráfico + lluvia**: señal enorme, dato limpio, ingestión trivial.
-
-Si el tráfico solo ofrece datos actuales, el collector debe arrancar cuanto antes: se necesitan meses de histórico propio para responder nada sobre lluvia.
+Resultado en [`fase-0-fuentes.md`](fase-0-fuentes.md). Conclusión: **el tráfico urbano no existe como dato abierto** (sensores municipales inventariados pero mudos; GI-20 cortada desde nov-2024), y en cambio **Dbizi y parkings son excelentes y en tiempo real**. El MVP pivota.
 
 ---
 
-## MVP v1 — tráfico (o Dbizi) + meteorología
+## MVP v1 — Dbizi + parkings + meteorología
 
-1. Obtener histórico disponible de tráfico y meteo.
-2. Normalizar timestamps y localizar sensores/estaciones.
-3. Asociar cada sensor de tráfico a su estación meteorológica más cercana (PostGIS).
+Ninguna de las dos fuentes de comportamiento tiene histórico: **el collector debe arrancar cuanto antes** — cada día sin recolectar es serie temporal perdida.
+
+1. Collector archivando GBFS de Dbizi (~1 min) y `getParkings.xsp` (~5 min), crudo + normalizado.
+2. Descargar histórico Euskalmet (zips 10-min) y cargar C017 Miramón.
+3. Asociar estaciones Dbizi/parkings a la estación meteo (PostGIS; con una sola estación de lluvia, trivial).
 4. Agregaciones horarias.
-5. Analizar en notebook el efecto de la lluvia sobre velocidad e intensidad.
+5. En cuanto haya unas semanas de datos, analizar en notebook:
 
-> ¿Cómo varía la velocidad/intensidad del tráfico cuando llueve?
+> ¿Cómo cambian el uso de Dbizi y la ocupación de parkings cuando llueve?
 
 Comparando siempre días comparables (lunes 08:30 con lluvia vs. lunes 08:30 seco, no vs. domingo).
+
+El tráfico queda como dimensión secundaria: histórico GI-20 2016–2024 + aforos DFG 2020–2025 para retrospectiva de accesos, e incidencias en vivo como factor explicativo de anomalías.
 
 ---
 
