@@ -1,123 +1,315 @@
-# Donostia Mobility Intelligence
+# Donostia Bike Intelligence
 
-Proyecto personal de ingeniería de datos: observar, analizar y explicar el comportamiento de la movilidad urbana en Donostia-San Sebastián usando datos públicos.
+## 1. Idea del proyecto
 
-> **La movilidad es el dominio; la ingeniería de datos es el verdadero proyecto.**
+Proyecto personal de **ingeniería y análisis de datos centrado en la red de bicicletas públicas Dbizi de Donostia-San Sebastián**.
 
-Pregunta inicial:
+El objetivo es construir un histórico de la evolución de la red y estudiar cómo diferentes factores externos afectan a su comportamiento:
 
-> ¿Cómo cambia el comportamiento normal de la movilidad de Donostia en función de las condiciones meteorológicas?
+- meteorología;
+- calendario laboral;
+- eventos;
+- incidencias y obras;
+- y, potencialmente, cualquier otra fuente que permita explicar cambios en la movilidad ciclista.
 
-Evolución prevista:
+La pregunta central:
 
-> ¿Podemos detectar anomalías en la movilidad y encontrar factores que las expliquen?
+> **¿Podemos entender el comportamiento normal de la red Dbizi y detectar y explicar cuándo se comporta de forma anómala?**
 
-No es una plataforma institucional ni un producto comercial. Donostia es el laboratorio.
+No pretende ser una plataforma comercial ni institucional. Donostia será nuestro **laboratorio real de experimentación con datos de movilidad**.
 
----
-
-## Fuentes de datos
-
-Validadas el 2026-08-20 con llamadas reales — detalle y evidencia en [`fase-0-fuentes.md`](fase-0-fuentes.md).
-
-| Fuente | Veredicto | Datos |
-|--------|-----------|-------|
-| 🚲 Dbizi | ✅ GBFS oficial sin auth (PBSC), TTL ~30 s | 70 estaciones, bicis/anclajes, eléctrica vs. mecánica. Sin histórico → collector |
-| 🅿️ Donostia parkings | ✅ Dinámico: `getParkings.xsp` (sin key) | 16 subterráneos con plazas libres en vivo + CKAN estático (OTA, disuasorios, barrios, viales) |
-| 🌧️ Euskalmet | ✅ Histórico 10-min desde 2003 (zips) + API con key gratuita | En Donostia, precipitación solo en **C017 Miramón** (desde ~2010) |
-| 🚗 Tráfico Euskadi | ❌ Muerta para Donostia | 187 sensores urbanos sin datos jamás; GI-20 cortó en nov-2024. Vivo: incidencias y cámaras. Alternativa: aforos DFG 2020–2025 (accesos, no urbano) |
-| 📅 Calendario | Tabla a mano (~14 filas/año) | Festivos de Gipuzkoa |
-
-Extensiones posibles (no ahora): eventos (Anoeta, Kursaal), incidencias, transporte público, calidad del aire.
+> **Dbizi es el objeto de estudio; el resto de fuentes son contexto.**
 
 ---
 
-## Decisiones de diseño
+## 2. Por qué Dbizi
 
-Recortes deliberados de sobre-ingeniería. Cada uno tiene su condición de reapertura.
+Motivación técnica y personal: es una fuente dinámica que representa comportamiento real de movilidad urbana, y un servicio usado habitualmente. Interesa entender:
 
-1. **Una sola aplicación collector con un job programado por fuente** — no un servicio por fuente. Son cuatro crons contra cuatro APIs escribiendo en la misma base de datos. *Se separa si algún día un collector necesita ciclo de vida o despliegue propio.*
-2. **PostgreSQL + PostGIS, y nada más.** Sin TimescaleDB, sin ClickHouse. Particionado e índices de Postgres aguantan de sobra el volumen de una ciudad de 190k habitantes. *Se reevalúa si una query de agregación tarda segundos con índices correctos.*
-3. **Exploración en notebook (pandas + folium/plotly) o Grafana sobre Postgres.** Sin frontend Vue ni API propia hasta que haya algo que enseñar a otros. *Se construye dashboard cuando exista audiencia.*
-4. **Guardar siempre el crudo de las APIs** (JSONB o ficheros) además de lo normalizado. Las APIs públicas cambian de formato; el crudo permite re-procesar.
-5. **Calendario = una tabla de festivos**, no un módulo.
-6. **ML aplazado** hasta tener histórico suficiente y una pregunta que lo justifique.
+- cómo se comporta la red;
+- qué estaciones tienen problemas recurrentes;
+- cómo afecta el tiempo;
+- qué ocurre durante eventos;
+- cuándo y dónde aparecen desequilibrios;
+- cómo evoluciona a lo largo del día y de la semana.
 
----
+La intención no es representar datos en un mapa:
 
-## Fase 0 — validar las fuentes ✅ HECHA (2026-08-20)
+> **El objetivo es tratar Dbizi como un sistema dinámico que podemos observar, modelizar y analizar.**
 
-Resultado en [`fase-0-fuentes.md`](fase-0-fuentes.md). Conclusión: **el tráfico urbano no existe como dato abierto** (sensores municipales inventariados pero mudos; GI-20 cortada desde nov-2024), y en cambio **Dbizi y parkings son excelentes y en tiempo real**. El MVP pivota.
-
----
-
-## MVP v1 — Dbizi + parkings + meteorología
-
-Ninguna de las dos fuentes de comportamiento tiene histórico: **el collector debe arrancar cuanto antes** — cada día sin recolectar es serie temporal perdida.
-
-1. Collector archivando GBFS de Dbizi (~1 min) y `getParkings.xsp` (~5 min), crudo + normalizado.
-2. Descargar histórico Euskalmet (zips 10-min) y cargar C017 Miramón.
-3. Asociar estaciones Dbizi/parkings a la estación meteo (PostGIS; con una sola estación de lluvia, trivial).
-4. Agregaciones horarias.
-5. En cuanto haya unas semanas de datos, analizar en notebook:
-
-> ¿Cómo cambian el uso de Dbizi y la ocupación de parkings cuando llueve?
-
-Comparando siempre días comparables (lunes 08:30 con lluvia vs. lunes 08:30 seco, no vs. domingo).
-
-El tráfico queda como dimensión secundaria: histórico GI-20 2016–2024 + aforos DFG 2020–2025 para retrospectiva de accesos, e incidencias en vivo como factor explicativo de anomalías.
+Además, la Fase 0 (ver [`fase-0-fuentes.md`](fase-0-fuentes.md)) confirmó que es, con diferencia, la mejor fuente abierta de la ciudad — mientras que el tráfico urbano directamente no se publica.
 
 ---
 
-## Modelo de datos
+## 3. Fuentes de datos
 
-Fuentes separadas, patrón común `station` + `measurement`:
+### 🚲 Dbizi — fuente principal ✅ validada
+
+**GBFS oficial, público, sin autenticación** (PBSC/Lyft):
 
 ```text
-traffic_station(id, name, geom, road, direction, source)
-traffic_measurement(station_id, timestamp, vehicle_count, speed, occupancy, raw jsonb)
+https://sansebastian.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json
+```
+
+- `station_information`: **70 estaciones** con lat/lon, dirección, capacidad.
+- `station_status`: bicis y anclajes disponibles, estado (`is_renting`, `is_returning`), `last_reported` en segundos, **desglose mecánica vs. eléctrica** (`vehicle_types_available`).
+- TTL 21–30 s → tiempo casi real.
+- **Sin histórico** → uno de los primeros componentes será un **collector periódico** que construya el nuestro:
+
+```text
+GBFS Dbizi
+    │
+    │ cada X minutos (configurable)
+    ▼
+Collector
+    │
+    ▼
+PostgreSQL (crudo + normalizado)
+    │
+    ▼
+histórico propio
+```
+
+### 🌧️ Meteorología — Euskalmet ✅ validada
+
+Principal fuente externa para explicar cambios de comportamiento. Variables: precipitación, temperatura, humedad, viento, presión…
+
+- **Histórico**: zips anuales gratuitos, granularidad **10 min**, desde 2003.
+- **Tiempo real**: API `api.euskadi.eus/euskalmet` con key gratuita (JWT RS256); sandbox sin auth para desarrollar.
+- **Matiz clave**: la única estación de Donostia con **precipitación es C017 Miramón** (43.2868, -1.97121). Santa Clara (C007) apoya con viento/temperatura. Para una ciudad de este tamaño, basta para el MVP.
+
+Relación espacial estación Dbizi → estación meteo más cercana vía PostGIS (con una sola estación de lluvia, trivial de inicio).
+
+**Preguntas**: ¿cómo afecta la lluvia al uso/disponibilidad? ¿hay umbral de precipitación? ¿efecto del viento y la temperatura? ¿cuánto tarda en aparecer el efecto? ¿cuánto tarda la red en recuperarse?
+
+### 📅 Calendario laboral
+
+Variable fundamental para distinguir comportamiento normal: día de la semana, laborable/festivo, vacaciones, mes, estación, puentes. Un lunes 08:30 se compara con otros lunes 08:30, no con un domingo. Implementación: **tabla de festivos de Gipuzkoa rellenada a mano** (~14 filas/año), no un módulo.
+
+### 🎫 Eventos ✅ validada (tres piezas)
+
+Una de las fuentes más interesantes para explicar anomalías. Cubierta con (detalle en el anexo de [`fase-0-fuentes.md`](fase-0-fuentes.md)):
+
+1. **API Kulturklik** (`api.euskadi.eus/culture/events/v1.0/events/byMonth/{y}/{m}/byMunicipality/20/82`, sin key) — agenda cultural completa, Semana Grande, Illumbe, Kursaal. Ojo: municipio **82** (NORA), coordenadas = centroide → tabla propia `venue → coords`, y **la API purga el pasado** → cosecha diaria.
+2. **TheSportsDB** (key `3`, Real Sociedad `idTeam 133724`) — partidos en Anoeta con hora local, filtrando `strVenue = "Reale Arena"`.
+3. **Scraper del Kursaal** (`/es/tipo/reuniones/`) — solo congresos, que no salen en Kulturklik.
+
+```text
+evento → zona afectada → estaciones Dbizi cercanas → cambio de comportamiento
+```
+
+**Preguntas**: ¿picos de demanda? ¿qué estaciones? ¿cuándo empieza y cuánto dura el efecto? ¿estaciones que se vacían vs. que acumulan? ¿la red se recupera sola o necesita redistribución?
+
+### 🚧 Incidencias y obras ✅ fuente parcial validada
+
+Para explicar cambios locales: obras, cortes, restricciones. La API de tráfico de Euskadi publica **incidencias en tiempo real con coordenadas** (~30-80k/año desde 2021, sin key) — verificado en Fase 0. Vía PostGIS: incidencia → estaciones a < X metros → ¿cambia su comportamiento durante el periodo?
+
+### Otras fuentes
+
+Regla de admisión:
+
+> **Una fuente nueva debe permitir responder una pregunta nueva sobre el comportamiento de Dbizi.**
+
+Candidatas: **parkings de Donostia** (plazas libres en vivo vía `getParkings.xsp`, ya validada en Fase 0 — ¿elección modal coche/bici según meteo?), Dbus, calidad del aire, peatones, infraestructura ciclista, y **tráfico si algún día vuelve a publicarse** (los sensores urbanos existen pero nunca han emitido; la GI-20 cortó en nov-2024).
+
+No se incorporarán datasets solo por aumentar volumen.
+
+---
+
+## 4. Decisiones de diseño
+
+Recortes deliberados (cada uno con su condición de reapertura):
+
+1. **Una sola aplicación con un scheduled job por fuente** — no un servicio por fuente. *Se separa si un collector necesita ciclo de vida propio.*
+2. **PostgreSQL + PostGIS y nada más.** Sin TimescaleDB/ClickHouse/Kafka hasta necesidad medida. *Se reevalúa si una agregación tarda segundos con índices correctos.*
+3. **Exploración en notebook (pandas + folium/plotly) o Grafana** antes que dashboard Vue + API propia. *Dashboard cuando haya algo que enseñar a otros.*
+4. **Guardar siempre el crudo** (JSONB) además de lo normalizado — las APIs cambian de formato.
+5. **ML aplazado** hasta tener histórico y una pregunta que lo justifique.
+
+---
+
+## 5. Arquitectura conceptual
+
+```text
+                    ┌──────────────┐
+                    │  GBFS DBIZI  │
+                    └──────┬───────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │  Collector   │  (una app, un job por fuente)
+                    └──────┬───────┘
+                           │
+        ┌──────────────────▼──────────────────┐
+        │        PostgreSQL + PostGIS         │
+        └──────────────────┬──────────────────┘
+                           │
+            ┌──────────────┼──────────────┬─────────────┐
+            ▼              ▼              ▼             ▼
+       Euskalmet      Calendario       Eventos     Incidencias
+            └──────────────┴──────┬───────┴─────────────┘
+                                  ▼
+                             ANALYTICS
+                                  │
+                    ┌─────────────┼─────────────┐
+                    ▼             ▼             ▼
+                Patrones      Anomalías     Predicción
+                                  │
+                                  ▼
+                     (notebook / Grafana → más adelante REST API + Vue)
+```
+
+---
+
+## 6. Modelo de datos
+
+Separación **estación** (estático) / **medición** (serie temporal) para no duplicar; `geom` PostGIS; `raw` JSONB con la respuesta original.
+
+```text
+dbizi_station(id, name, geom, capacity, source)
+dbizi_measurement(station_id, timestamp, bikes_available, docks_available,
+                  mechanical_available, electric_available, status, raw jsonb)
 
 weather_station(id, name, geom, altitude, source)
-weather_measurement(station_id, timestamp, temperature, precipitation, humidity, wind_speed, pressure, raw jsonb)
+weather_measurement(station_id, timestamp, temperature, precipitation, humidity,
+                    wind_speed, pressure, raw jsonb)
 
-dbizi_station(id, name, geom, capacity, source)
-dbizi_measurement(station_id, timestamp, bikes_available, docks_available, raw jsonb)
-
-parking(id, name, geom, type, capacity, source)
-parking_measurement(parking_id, timestamp, occupied, available, raw jsonb)   -- solo si aparece fuente dinámica
-
+event(id, name, start_time, end_time, geom, type, source)
+incident(id, type, description, start_time, end_time, geom, source)
 holiday(date, name)
 ```
 
-`geom` = geometría PostGIS; permite "estación meteorológica más cercana", "parkings a menos de X metros", etc.
+PostGIS permite: estación meteo más cercana, estaciones afectadas por incidencia/evento, agrupación por barrios (GeoJSON de barrios disponible en el CKAN municipal), distancias. El proyecto trabaja esencialmente con **espacio + tiempo → comportamiento**.
 
 ---
 
-## Etapas
+## 7. Construcción del histórico
+
+Captura del estado completo de la red cada pocos minutos (frecuencia configurable; el TTL del feed es ~30 s, así que 1–5 min da resolución de sobra):
 
 ```text
-0. Validar fuentes        → "Sé qué datos existen"
-1. Ingestión              → "Consigo los datos"
-2. Histórico fiable       → "Tengo series temporales limpias"
-3. Exploración            → "Puedo observar qué pasa"
-4. Análisis               → "Puedo cuantificar relaciones (lluvia → tráfico)"
-5. Anomalías              → "Puedo detectar comportamientos anómalos"
-6. Explicación            → "Puedo buscar qué factores los explican"
-7. Predicción             → "Puedo anticipar qué puede ocurrir"
+Estación A
+12:00 → 8 bicicletas
+12:05 → 7
+12:10 → 6
+12:15 → 4
+12:25 → 0
 ```
 
-No es necesario llegar a la última etapa. Cada etapa debe producir algo funcional.
+Esto construye lo que la API no da: la evolución temporal de la red.
 
 ---
 
-## Preguntas que queremos responder
+## 8. Primer objetivo: describir el comportamiento normal
 
-**Meteo → tráfico**: ¿cuánto afecta la lluvia a la velocidad? ¿qué intensidad de lluvia empieza a notarse? ¿depende de la hora, del día, de la zona?
+Antes de predecir, saber qué es "normal". Perfil por estación × día-tipo × hora, y comparación observado vs. esperado:
 
-**Meteo → Dbizi**: ¿cuánto cae el uso con lluvia? ¿cuánto tarda el efecto? ¿hay recuperación al escampar?
+```text
+Estación X, 18:00
+Esperado: 12 bicicletas · Real: 2 · Desviación: -10
+```
 
-**Parking → tráfico** (si hay fuente dinámica): ¿la saturación de un parking coincide con más tráfico cercano? ¿patrones compatibles con tráfico de búsqueda de aparcamiento?
+Esa desviación es la base de la detección de anomalías.
 
-**Efecto temporal**: lag entre inicio de lluvia y congestión máxima, duración del impacto, tiempo de recuperación — comparados entre zonas.
+---
 
-**Anomalías**: modelo de comportamiento esperado por (sensor, día tipo, hora, meteo); desviaciones → buscar factor explicativo (lluvia, festivo, evento, incidencia…).
+## 9. Detección y explicación de anomalías
+
+Anomalía = comportamiento significativamente distinto del esperado: estación vacía cuando no toca, saturada cuando no toca, o con una evolución distinta a la habitual aunque tenga bicis.
+
+Para cada anomalía, consultar el contexto:
+
+```text
+¿Llovía? ¿Viento? ¿Festivo? ¿Evento? ¿Obra/incidencia cerca? ¿Qué hacen las vecinas?
+```
+
+Sin afirmar causalidad automáticamente: el objetivo es generar **hipótesis explicativas basadas en datos**.
+
+---
+
+## 10. Análisis de la red
+
+No solo estación a estación: la red completa. Estaciones que se vacían rápido, que acumulan, nodos importantes, desequilibrios, patrones de redistribución, zonas con comportamiento propio, estaciones que tocan 0% o 100% de forma recurrente → **problemas estructurales de la red**.
+
+### Inferencia de movimientos (especulativa)
+
+Con frecuencia alta de captura se pueden inferir flujos entre estaciones (A pierde 3, B gana 3). Información **inferida, no observada**: la contaminan redistribución del operador, estaciones llenas/vacías y movimientos simultáneos. Si resulta fiable, podría construirse un grafo temporal de movilidad ciclista. No es objetivo del MVP.
+
+---
+
+## 11. Meteorología y dinámica temporal
+
+No solo `lluvia sí/no`: intensidad, duración, tiempo desde inicio/fin de la lluvia, temperatura, viento. Fenómenos a medir:
+
+```text
+inicio de lluvia → lag → cambio de comportamiento → máximo impacto → fin → recuperación
+```
+
+Métricas: `weather_impact_lag`, `maximum_impact`, `impact_duration`, `recovery_time` — comparables entre estaciones y zonas.
+
+---
+
+## 12. Visualización
+
+Fase notebook/Grafana primero (decisión 3). El dashboard, cuando llegue: mapa (estaciones, disponibilidad, anomalías, eventos, incidencias, meteo), timeline para recorrer el histórico, gráficas por estación, y comparaciones tipo *lunes lluvioso vs. lunes seco* o *día normal vs. día con evento*.
+
+---
+
+## 13. Machine Learning (aplazado)
+
+Cuando haya histórico y pregunta que lo justifique:
+
+- **Predicción**: bicis disponibles a +15/+30 min por estación (hora, día, histórico, meteo, eventos, vecinas).
+- **Predicción de saturación**: ¿qué estaciones tienen riesgo de quedarse a 0 (o llenarse) en 30 min? — esto tendría incluso utilidad práctica directa.
+
+---
+
+## 14. Stack
+
+- **Backend**: Java + Spring Boot, una app con scheduled jobs (collectors) y, más adelante, REST.
+- **BD**: PostgreSQL + PostGIS. (TimescaleDB/ClickHouse solo si el dolor aparece.)
+- **Exploración**: notebook / Grafana. **Frontend** Vue cuando haya audiencia.
+- **Ingestión**: Spring Scheduler. Colas/Kafka/streams solo si surge necesidad real — no antes.
+
+---
+
+## 15. Fases
+
+```text
+1. Ingestión         → "Consigo datos de Dbizi y construyo histórico"   ← EMPEZAR YA (sin histórico previo, cada día cuenta)
+2. Observación       → "Veo cómo se comporta la red"
+3. Contextualización → "Incorporo meteorología y calendario"
+4. Explicación       → "Incorporo eventos e incidencias"
+5. Anomalías         → "Detecto lo que se sale de lo normal"
+6. Análisis          → "Busco factores que lo expliquen"
+7. Predicción        → "Anticipo el comportamiento de la red"
+8. Experimentación   → "Nuevas fuentes = nuevas preguntas"
+```
+
+Cada fase debe producir algo funcional. No es necesario llegar a la última.
+
+## 16. MVP
+
+1. Collector capturando el GBFS periódicamente → PostgreSQL (crudo + normalizado).
+2. Estado actual + histórico propio creciendo.
+3. Gráficas temporales por estación (notebook).
+4. Cargar meteo de Miramón (histórico 10-min ya descargable).
+5. Comparar días y condiciones meteorológicas.
+
+Primera pregunta que debe poder responder el sistema:
+
+> **¿Cómo cambia el comportamiento de Dbizi a lo largo del día y cómo se relaciona con las condiciones meteorológicas?**
+
+---
+
+## 17. Qué hace interesante al proyecto
+
+Trabajar con un sistema real, dinámico e imperfecto: APIs, ingestión periódica, construcción de históricos, series temporales, PostGIS, estadística, anomalías, análisis de redes, inferencia de movimientos, ML, visualización. Y el problema clásico de la ingeniería de datos:
+
+> **Los datos que necesitamos no existen exactamente como nos gustaría, así que tenemos que construirlos y decidir cómo interpretarlos.**
+
+## 18. Posicionamiento
+
+> **Estoy construyendo un sistema para estudiar cómo se comporta la red Dbizi de Donostia: un histórico propio de sus estaciones cruzado con meteorología, calendario, eventos e incidencias para detectar patrones, anomalías y posibles explicaciones.**
+
+La ausencia de datos de tráfico no bloquea el proyecto; si algún día vuelven a publicarse, se incorporan como una dimensión más. El proyecto empieza como **laboratorio de movilidad ciclista** y puede crecer hacia un análisis más amplio de movilidad urbana.

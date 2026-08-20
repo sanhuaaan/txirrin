@@ -50,3 +50,42 @@ La API `api.euskadi.eus/traffic` es abierta (sin key, CC BY), bien estructurada,
 5. La pregunta inicial se reformula:
 
 > ¿Cómo cambian el uso de Dbizi y la ocupación de parkings en Donostia en función de la meteorología?
+
+---
+
+# Anexo — Fuente de eventos (validada 2026-08-20)
+
+## 🎫 Eventos — ✅ RESUELTO con tres piezas
+
+### 1. API Kulturklik (Open Data Euskadi) — fuente principal
+
+```text
+https://api.euskadi.eus/culture/events/v1.0/events/byMonth/{año}/{mes}/byMunicipality/20/82
+```
+
+Sin key, JSON limpio, paginado (`_page=N`, 20/página). Ago-2026 → 287 eventos: **Semana Grande** (conciertos con plaza y hora), Illumbe/Donostia Arena, Kursaal, Victoria Eugenia, salas pequeñas (Dabadaba…).
+
+- ⚠️ Donostia = provincia **20**, municipio **82** (código NORA — el 69 es Astigarraga).
+- Campos: nombre es/eu, `startDate`/`endDate` (día), `openingHoursEs` (hora inicio en texto libre), `establishmentEs` (venue), tipo, precio.
+- ⚠️ `municipalityLatitude/Longitude` es el **centroide del municipio** — geocodificar a mano los ~30-50 venues recurrentes (tabla `venue → coords`, una vez).
+- ⚠️ **La API purga el pasado** (verificado: 2024/2022 vacíos) → cron diario y el histórico lo construimos nosotros.
+- Descartar del análisis exposiciones de larga duración (`endDate - startDate` grande).
+
+### 2. TheSportsDB — Anoeta/Reale Arena (~40k personas)
+
+```text
+https://www.thesportsdb.com/api/v1/json/3/eventsnext.php?id=133724
+```
+
+Key pública `3` gratis; Real Sociedad = `idTeam 133724`. Da `dateEventLocal`, `strTimeLocal` (hora local), `strVenue` → filtrar `"Reale Arena"` para partidos en casa. Histórico por temporada vía `eventsseason.php`. Alternativa si el rate limit molesta: football-data.org (key gratuita, no verificada).
+
+### 3. Scraper Kursaal — solo congresos
+
+`https://www.kursaal.eus/es/tipo/reuniones/` — WordPress sin API (post type no expuesto en wp-json, sin JSON-LD Event), pero HTML estable con título, fecha y hora. Lo cultural del Kursaal ya llega vía Kulturklik; los **congresos** (Gastronomika, ICDMS…) no, y mueven miles de personas. Venue fijo: 43.3277, -1.9755.
+
+### Descartados (con evidencia)
+
+- **CKAN municipal**: 140 datasets, cero de agenda/eventos.
+- **Silo Domino** (`getEventos.xsp` y similares): 404, donostia.eus migró a Liferay; la agenda web nueva es HTML server-rendered sin API (y su contenido ya fluye a Kulturklik).
+- **Donostia Kultura**: Cloudflare bloquea el acceso directo, pero es fuente ingerida por Kulturklik (verificado en `sourceNameEs`).
+- **Eventbrite**: retiró la API pública de búsqueda. **Songkick/Bandsintown**: keys cerradas/con aprobación, redundantes. **Ticketmaster**: key gratuita disponible, cobertura Donostia sin verificar — innecesario de momento. **PredictHQ**: de pago, es exactamente este producto si algún día se quiere pagar.
