@@ -1,5 +1,5 @@
 #!/bin/bash
-# Backup diario a GCS: dump de la BD (retención 14 días por lifecycle del bucket)
+# Backup diario a GCS: dump de la BD (retención 7 días por lifecycle del bucket)
 # + crudo del día anterior (inmutable, se conserva siempre). Cron: 04:10 UTC.
 set -euo pipefail
 . ~/.dbizi.env   # credenciales + HC_BACKUP (ping de healthchecks.io)

@@ -22,7 +22,7 @@ Estado a 2026-08-21. Coste total: **0 €/mes**.
 └──────┬─────────────────────────────────────────────────────────────────────────┘
        ▼
   gs://cosas-con-datos-en-dbizi-backup
-  (dumps/: 14 días · raw/ y events/: para siempre)
+  (dumps/: 7 días · raw/ y events/: para siempre)
 ```
 
 ## VM
@@ -85,9 +85,10 @@ Migrar el esquema **antes** de copiar los `.py`: el collector corre cada 2 min y
 
 ## Backups y restauración
 
-- **Qué**: dump diario `pg_dump -Fc` (retención 14 días vía lifecycle **acotada con `matchesPrefix: ["dumps/"]`** — verificado 2026-08-21: el crudo y los eventos no caducan) + crudo Dbizi del día anterior + cosechas de eventos (ambos permanentes; el crudo permite re-procesar cualquier campo no normalizado hoy).
+- **Qué**: dump diario `pg_dump -Fc` (retención **7 días** vía lifecycle acotada con `matchesPrefix: ["dumps/"]` — verificado 2026-08-21: el crudo y los eventos no caducan) + crudo Dbizi del día anterior + cosechas de eventos (ambos permanentes; el crudo permite re-procesar cualquier campo no normalizado hoy).
 - **Dónde**: `gs://cosas-con-datos-en-dbizi-backup` (us-west1, dentro de los 5 GB free). **Privado**, y verificado que sigue siéndolo tras crear el bucket público de visualización.
 - **Pérdida máxima asumida**: 24 h de snapshots.
+- **Por qué 7 días de dumps y no más**: `raw/` se conserva para siempre y es la fuente real — `ingest_raw.sh` reconstruye `dbizi_measurement` desde ahí. Catorce copias completas de una base que crece eran el 70% de la huella en GCS (~3 GB al año) sin aportar nada que el crudo no cubra.
 - **Restauración** (VM muerta):
   1. Recrear VM (misma receta: e2-micro us-west1, scope `storage-rw`) + Docker + compose de `/opt/dbizi/` (recrear `.env` con contraseña nueva).
   2. `psql < sql/schema.sql && psql < sql/holidays.sql`
