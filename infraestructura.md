@@ -21,8 +21,8 @@ Sin servidor, coste cero: el repo público [`sanhuaaan/dbizi-raw`](https://githu
 
 | Opción | Coste | Specs | Veredicto |
 |--------|-------|-------|-----------|
-| **Oracle Cloud Always Free** | 0 € | Hasta 4 vCPU ARM + 24 GB RAM + 200 GB | **Primera opción.** Gratis para siempre. Pegas: piden tarjeta, a veces sin capacidad ARM al crear (reintentar), y reclaman instancias *idle* — el collector 24/7 evita parecerlo; pasar a pay-as-you-go blinda la cuenta sin pagar. Java ARM64 sin problema |
-| **GCP `e2-micro`** | 0 € | 1 GB RAM, 30 GB, regiones EE. UU. | **Plan B.** Free tier permanente. Justo pero cabe: Postgres + collector con `-Xmx256m`. Latencia irrelevante |
+| **Oracle Cloud Always Free** | 0 € | Hasta 4 vCPU ARM + 24 GB RAM + 200 GB | ❌ **Descartada 2026-08-20**: imposible completar el registro tras varios intentos (su verificación rechaza sin explicar; problema conocido) |
+| **GCP `e2-micro`** | 0 € | 2 vCPU compartidas, 1 GB RAM, 30 GB standard PD, regiones EE. UU. (us-west1/central1/east1) | **← Elegida.** Free tier permanente (activar cuenta completa para que no pare a los 90 días; boot disk *standard*, no SSD). Justo pero cabe: Postgres + collector con `-Xmx256m` |
 | **Hetzner** | ~4 €/mes | 2 vCPU, 4 GB | La salida honesta si los free tiers dan guerra. Cero fragilidad |
 | **Raspberry Pi / mini-PC** | ~60 € una vez | — | En casa; suma electricidad (~1 €/mes) y depende de tu conexión |
 | AWS / Azure free tier | 0 € temporal | — | ❌ Solo 12 meses o créditos; el proyecto vive años |
@@ -32,9 +32,16 @@ Sin servidor, coste cero: el repo público [`sanhuaaan/dbizi-raw`](https://githu
 
 70 estaciones × captura cada 2 min ≈ 50k filas/día ≈ 18M filas/año. Postgres en 1 GB de RAM lo maneja; el crudo JSONB es lo único que abulta (~25 MB/día sin comprimir — TOAST comprime). Cualquier opción de la tabla sobra.
 
+## VM (creada 2026-08-20) ✅
+
+- **`dbizi-vm`** — e2-micro free tier, zona `us-west1-a`, Ubuntu 24.04, 30 GB pd-standard, IP pública efímera `34.53.18.193` (cambia si la VM se para/arranca).
+- Proyecto GCP: `cosas-con-datos-en-dbizi` (cuenta personal). En local, configuración gcloud separada: `--configuration=dbizi` (la de trabajo `default` queda intacta).
+- SSH: `gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi`
+- **Alerta de presupuesto: 1 €** (avisa al 50% y 100%) sobre la cuenta de facturación. Vigilar el primer email: desde 2024 Google cobra las IPv4 externas en uso (~3 €/mes) y no está claro si exime al free tier — si aparece ese cargo, reevaluar (a ese precio, Hetzner da 4 GB de RAM).
+
 ## Plan
 
-1. ✅ Git-scraping activo (no se pierde histórico mientras tanto).
-2. Sacar cuenta Oracle Always Free → VM ARM.
+1. ✅ Git-scraping activo (cron-job.org cada 5 min).
+2. ✅ VM GCP free tier creada y verificada por SSH.
 3. Docker compose (postgis, opcional Grafana) + collector real en la VM.
 4. Backfill del historial de `dbizi-raw` a Postgres.
