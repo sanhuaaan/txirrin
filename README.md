@@ -311,7 +311,8 @@ Trabajar con un sistema real, dinámico e imperfecto: APIs, ingestión periódic
 ## 18. Reparto óptimo
 
 El objetivo que da al proyecto un para qué, más allá de describir: usar el histórico para proponer
-un **reparto hipotético en camión** que minimice las estaciones vacías. Documento propio en
+un **reparto hipotético en camión** que maximice el tiempo que cada estación pasa en su banda
+sana (con bicis que coger y anclajes donde dejar). Documento propio en
 [`reparto-optimo.md`](reparto-optimo.md), con lo que ya se ve en los primeros datos (la periferia
 cuesta arriba se vacía; Dbizi cierra de 00:00 a 06:00; no se detecta camión), el problema
 metodológico de fondo (solo se observa inventario, nunca demanda) y el plan por etapas.
