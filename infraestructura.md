@@ -50,10 +50,31 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi -- -L 5432:l
 # y en otra terminal: psql -h localhost -U dbizi dbizi
 ```
 
+## Esquema e ingesta (2026-08-21) ✅
+
+- Esquema mínimo en [`sql/schema.sql`](sql/schema.sql): `dbizi_station` (con `geom` PostGIS) + `dbizi_measurement` (PK `(station_id, ts)`, desglose mecánica/eléctrica). El crudo no se duplica en BD: vive en el historial de `dbizi-raw`.
+- [`scripts/backfill.py`](scripts/backfill.py): recorre el historial git de `dbizi-raw` y carga snapshots. Re-ejecutable e incremental (estado del último commit procesado en `~/.dbizi_backfill_last` de la VM, `ON CONFLICT DO NOTHING`).
+- Backfill inicial hecho: 229 snapshots / 16k filas (desde 2026-08-20 11:46 UTC).
+- **Ingesta continua**: cron en la VM cada 10 min (`~/ingest.sh` → `git pull` + backfill incremental). Cadena completa: cron-job.org → Actions → git → VM → Postgres, latencia máx. ~15 min.
+
+## Captura directa (2026-08-21) ✅ — arquitectura final
+
+[`scripts/collect.py`](scripts/collect.py) en cron de la VM **cada 2 min**: GBFS → Postgres directo, sin intermediarios, y **crudo gzip a disco** (`~/raw/YYYYMMDD/`, ~1,1 MB/día — décadas de margen). `station_information` se refresca y archiva una vez al día. Reutiliza el parseo de `backfill.py`, que queda como herramienta de reparación de huecos.
+
+Esquema ampliado y re-backfilleado desde el historial completo de git antes de retirar `dbizi-raw`: `vehicles_disabled` / `docks_disabled` / `bikes_overflow` (salud de estaciones) y `address` / `post_code`.
+
+**Retirada de `dbizi-raw`** (decidida 2026-08-21, para frenar el crecimiento del almacenamiento en GitHub — crecía ~300-400 MB/año):
+
+- [x] Job de cron-job.org parado y repo `sanhuaaan/dbizi-raw` borrado (usuario, 2026-08-21).
+- [x] Cron `ingest.sh` retirado de la VM; el clon local `~/dbizi-raw` (804 KB) se conserva como archivo del histórico git y `backfill.py` sigue funcionando contra él (tolera la ausencia de remoto).
+- ⚠️ La VM es ahora el único punto de captura; el crudo local y el backup pendiente a GCS son la red de seguridad.
+
 ## Plan
 
-1. ✅ Git-scraping activo (cron-job.org cada 5 min).
+1. ✅ Git-scraping activo → **en retirada** (ver arriba).
 2. ✅ VM GCP free tier creada y verificada por SSH.
 3. ✅ PostGIS 3.4 / Postgres 16 en Docker en la VM.
-4. Esquema mínimo + backfill del historial de `dbizi-raw` a Postgres.
-5. Collector real (Spring Boot) en la VM; git-scraping queda de redundancia.
+4. ✅ Esquema + backfill del histórico de git.
+5. ✅ Captura directa cada 2 min con crudo en disco (sustituye al collector Spring Boot: no aporta nada sobre esto en una VM de 1 GB).
+6. Meteo: carga del histórico 10-min de C017 Miramón + notebook de exploración cuando haya ~2-3 semanas de datos.
+7. Backup periódico `pg_dump` + `~/raw/` a GCS (5 GB free) — pendiente, gana importancia al retirar dbizi-raw.
