@@ -312,7 +312,11 @@ Trabajar con un sistema real, dinámico e imperfecto: APIs, ingestión periódic
 
 Sin objetivo analítico — porque sí:
 
-- **Timelapse isométrico de la ciudad**: las 70 estaciones como barras 3D que crecen y decrecen al ritmo de los snapshots (ver la ciudad "respirar" en hora punta). Plan lazy: deck.gl `ColumnLayer` sobre mapa oscuro con pitch ~50°, JSON embebido, slider con interpolación entre frames. Viable con un solo día de datos; la versión buena es *lunes lluvioso vs. lunes seco* lado a lado.
+- **Timelapse isométrico de la ciudad** ✅ *primera versión*: las 70 estaciones como columnas 3D que crecen y decrecen al ritmo de los snapshots. Se construye con `scripts/build_timelapse.py` (stdlib pura: dos CSV de Postgres dentro, HTML autocontenido fuera) sobre `viz/timelapse.tpl.html` y la geometría de barrios ya simplificada en `viz/donostia-barrios.json`. El HTML generado no se versiona: `./scripts/build_timelapse.py stations.csv meas.csv` lo rehace.
+  - Sin deck.gl al final: se dibuja a canvas con una proyección isométrica propia (~40 líneas), porque así el HTML no depende de ningún CDN y se puede compartir tal cual.
+  - **Altura** = bicis disponibles. **Color** = rampa divergente rojo↔gris↔azul: los dos extremos son fallos —ni bici que coger, ni sitio donde dejarla— y el equilibrio es lo silencioso. Los polos están validados para daltonismo contra el fondo oscuro.
+  - Lo que se ve con 28 h de datos: el total de la red apenas oscila un 6%, pero 34 de 70 estaciones tocan el cero y 12 se llenan del todo. La historia es la **redistribución**, no el volumen.
+  - Pendiente, y es lo que pedía la idea original: *lunes lluvioso vs. lunes seco* lado a lado. Acotar el `WHERE ts` de la consulta ya permite generar cada día por separado; falta tener dos lunes comparables y la vista doble.
 
 ## 19. Posicionamiento
 

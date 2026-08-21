@@ -1,0 +1,341 @@
+<title>Donostia respira</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Mundo visual único y deliberado: una pantalla de instrumento nocturna.
+   Sin bloques de tema — cada color se pinta explícito para que la página
+   se sostenga sobre cualquier fondo del anfitrión. */
+:root{
+  --ground:#0c1116; --ground-2:#0a0e12; --panel:#131b23; --line:#1e2a35;
+  --ink:#e6edf3; --ink-2:#93a2b0; --ink-3:#5d6b78;
+  --empty:#e66767; --mid:#6b7684; --full:#3987e5;
+  --space:clamp(14px,2.2vw,26px);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  overflow:hidden;
+}
+#stage{position:fixed; inset:0}
+canvas{display:block; width:100%; height:100%; cursor:crosshair}
+
+.overlay{position:fixed; pointer-events:none}
+.overlay > *{pointer-events:auto}
+
+/* ---- cabecera ---- */
+#head{top:0; left:0; right:0; padding:var(--space) var(--space) 0;
+      display:flex; justify-content:space-between; align-items:flex-start; gap:20px}
+h1{
+  font-family:"Bodoni Moda",Georgia,"Times New Roman",serif;
+  font-weight:700; font-size:clamp(26px,3.4vw,44px); line-height:.95;
+  margin:0; letter-spacing:-.01em; text-wrap:balance;
+}
+h1 em{font-style:italic; font-weight:500; color:var(--ink-2)}
+.sub{margin:.55em 0 0; max-width:34ch; font-size:13px; line-height:1.5; color:var(--ink-2)}
+
+#clock{text-align:right; flex:none}
+#time{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums;
+      font-size:clamp(30px,4.4vw,54px); line-height:1; letter-spacing:-.02em}
+#day{font-size:12px; color:var(--ink-2); margin-top:.5em; text-transform:capitalize}
+
+/* ---- estadísticas ---- */
+#stats{top:calc(var(--space) + 108px); right:var(--space); display:flex; flex-direction:column; gap:2px;
+       background:color-mix(in srgb, var(--panel) 82%, transparent); backdrop-filter:blur(7px);
+       border:1px solid var(--line); border-radius:3px; padding:12px 14px; min-width:186px}
+.stat{display:flex; justify-content:space-between; align-items:baseline; gap:16px; padding:3px 0}
+.stat .k{font-size:11px; color:var(--ink-2); letter-spacing:.03em}
+.stat .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:16px}
+.stat .v small{font-size:11px; color:var(--ink-3)}
+.dot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px}
+
+/* ---- leyenda ---- */
+#legend{left:var(--space); bottom:calc(var(--space) + 74px); max-width:270px}
+.lgd-title{font-size:11px; color:var(--ink-2); letter-spacing:.06em; text-transform:uppercase; margin-bottom:8px}
+#ramp{height:9px; border-radius:2px; border:1px solid var(--line)}
+.lgd-ends{display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--ink-3)}
+.lgd-note{margin-top:12px; font-size:11px; line-height:1.55; color:var(--ink-3)}
+.lgd-note b{color:var(--ink-2); font-weight:500}
+
+/* ---- controles ---- */
+#ctl{left:0; right:0; bottom:0; padding:0 var(--space) var(--space);
+     display:flex; align-items:center; gap:14px}
+button{
+  font:inherit; font-size:13px; color:var(--ink); background:var(--panel);
+  border:1px solid var(--line); border-radius:3px; padding:9px 15px; cursor:pointer;
+  transition:border-color .15s, background .15s; flex:none; min-width:96px;
+}
+button:hover{border-color:var(--ink-3); background:#18222c}
+button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
+#scrub{flex:1; appearance:none; height:3px; border-radius:2px;
+       background:linear-gradient(90deg,var(--ink-3) 0 var(--pct,0%),var(--line) var(--pct,0%) 100%);
+       cursor:pointer}
+#scrub::-webkit-slider-thumb{appearance:none; width:15px; height:15px; border-radius:50%;
+       background:var(--ink); border:none; cursor:grab}
+#scrub::-moz-range-thumb{width:15px; height:15px; border-radius:50%; background:var(--ink); border:none}
+#scrub:focus-visible{outline:2px solid var(--ink); outline-offset:5px}
+#speed{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-2); min-width:96px}
+
+/* ---- tooltip ---- */
+#tip{position:fixed; pointer-events:none; opacity:0; transform:translate(-50%,-100%);
+     background:var(--panel); border:1px solid var(--line); border-radius:3px;
+     padding:9px 11px; font-size:12px; line-height:1.45; white-space:nowrap; z-index:9;
+     transition:opacity .12s; box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#tip .n{font-weight:600; margin-bottom:3px}
+#tip .d{font-family:"IBM Plex Mono",monospace; color:var(--ink-2); font-variant-numeric:tabular-nums}
+
+@media (max-width:720px){
+  #stats{display:none}
+  #legend{bottom:calc(var(--space) + 66px); max-width:200px}
+  .sub{display:none}
+  button{min-width:76px}
+  #speed{display:none}
+}
+@media (prefers-reduced-motion:reduce){ #tip{transition:none} }
+</style>
+
+<div id="stage"><canvas id="c"></canvas></div>
+
+<div class="overlay" id="head">
+  <div>
+    <h1>Donostia <em>respira</em></h1>
+    <p class="sub">28 horas de la red Dbizi. Cada columna es una estación:
+      la altura son las bicis que hay dentro; el color, si eso es mucho o poco
+      para ella.</p>
+  </div>
+  <div id="clock">
+    <div id="time">--:--</div>
+    <div id="day">&nbsp;</div>
+  </div>
+</div>
+
+<div class="overlay" id="stats">
+  <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
+  <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
+  <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
+</div>
+
+<div class="overlay" id="legend">
+  <div class="lgd-title">Ocupación de la estación</div>
+  <div id="ramp"></div>
+  <div class="lgd-ends"><span>sin bicis</span><span>equilibrada</span><span>sin sitio</span></div>
+  <p class="lgd-note">Los dos extremos son fallos: no hay bici que coger, o no
+    hay dónde dejarla. <b>El equilibrio es lo silencioso.</b></p>
+</div>
+
+<div class="overlay" id="ctl">
+  <button id="play" aria-label="Reproducir o pausar el timelapse">Reproducir</button>
+  <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
+  <span id="speed"></span>
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+const DATA = __DATA__;
+</script>
+<script>
+(() => {
+  "use strict";
+  const cvs = document.getElementById("c"), ctx = cvs.getContext("2d");
+  const S = DATA.stations, F = DATA.frames, POLYS = DATA.polys;
+  const N = S.length, NF = F.length;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // --- proyección isométrica: 30°, el ángulo que hace cuadrar las diagonales ---
+  const A = Math.PI / 6, COS = Math.cos(A), SIN = Math.sin(A);
+  const M_PER_BIKE = 46, SIDE = 115;           // metros por bici / lado de la columna
+  const iso = (x, y, z) => [(x - y) * COS, (x + y) * SIN - z];
+
+  // --- encuadre: bbox de todo lo dibujable, en espacio ya proyectado ---
+  let bb = null;
+  const grow = (p) => {
+    if (!bb) bb = [p[0], p[1], p[0], p[1]];
+    else { bb[0]=Math.min(bb[0],p[0]); bb[1]=Math.min(bb[1],p[1]);
+           bb[2]=Math.max(bb[2],p[0]); bb[3]=Math.max(bb[3],p[1]); }
+  };
+  const maxCap = Math.max(...S.map(s => s.c));
+  // Solo las estaciones fijan el encuadre: incluir los barrios metía kilómetros
+  // de municipio sin una sola estación y dejaba la ciudad diminuta.
+  for (const s of S) { grow(iso(s.x, s.y, 0)); grow(iso(s.x, s.y, maxCap * M_PER_BIKE)); }
+
+  let W = 0, H = 0, k = 1, ox = 0, oy = 0;
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.round(W * dpr); cvs.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const padX = W < 720 ? 24 : 150, padTop = W < 720 ? 150 : 190, padBot = 130;
+    k = Math.min((W - padX * 2) / (bb[2] - bb[0]), (H - padTop - padBot) / (bb[3] - bb[1]));
+    ox = (W - (bb[2] - bb[0]) * k) / 2 - bb[0] * k;
+    oy = padTop + (H - padTop - padBot - (bb[3] - bb[1]) * k) / 2 - bb[1] * k;
+    draw();
+  }
+  const sx = (p) => p[0] * k + ox, sy = (p) => p[1] * k + oy;
+
+  // --- rampa divergente: rojo (vacía) ← gris (equilibrio) → azul (llena) ---
+  const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  const EMPTY = hex("#e66767"), MID = hex("#6b7684"), FULL = hex("#3987e5");
+  const lerp = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  function ramp(r) {                            // r = ocupación 0..1
+    return r < .5 ? lerp(EMPTY, MID, r / .5) : lerp(MID, FULL, (r - .5) / .5);
+  }
+  const shade = (c, m) => `rgb(${Math.round(c[0]*m)},${Math.round(c[1]*m)},${Math.round(c[2]*m)})`;
+
+  // leyenda: la misma función, para que barra y columnas no puedan divergir
+  document.getElementById("ramp").style.background =
+    "linear-gradient(90deg," + Array.from({length: 21}, (_, i) => {
+      const c = ramp(i / 20); return `rgb(${c[0]},${c[1]},${c[2]}) ${i * 5}%`;
+    }).join(",") + ")";
+
+  // --- estado ---
+  let pos = 0, playing = false, last = 0;
+  const SPF = 130;                              // ms por frame de 5 min
+  const el = { time: document.getElementById("time"), day: document.getElementById("day"),
+               tot: document.getElementById("s-tot"), emp: document.getElementById("s-emp"),
+               ful: document.getElementById("s-ful"), scrub: document.getElementById("scrub"),
+               play: document.getElementById("play"), speed: document.getElementById("speed"),
+               tip: document.getElementById("tip") };
+  const fTime = new Intl.DateTimeFormat("es-ES", { timeZone:"Europe/Madrid", hour:"2-digit", minute:"2-digit", hour12:false });
+  const fDay  = new Intl.DateTimeFormat("es-ES", { timeZone:"Europe/Madrid", weekday:"long", day:"numeric", month:"long" });
+
+  // bicis por estación en `pos`, interpolando entre frames para que crezcan suave
+  const bikes = new Float32Array(N);
+  function sample() {
+    const i = Math.min(NF - 1, Math.floor(pos)), j = Math.min(NF - 1, i + 1);
+    const t = reduce ? 0 : pos - i, a = F[i].b, b = F[j].b;
+    for (let s = 0; s < N; s++) bikes[s] = a[s] + (b[s] - a[s]) * t;
+    return F[i];
+  }
+
+  // orden del pintor: primero lo lejano (menor x+y), para que lo cercano tape
+  const order = S.map((_, i) => i).sort((a, b) => (S[a].x + S[a].y) - (S[b].x + S[b].y));
+
+  function draw() {
+    if (!bb) return;
+    const fr = sample();
+    ctx.fillStyle = "#0c1116"; ctx.fillRect(0, 0, W, H);
+
+    // suelo: los 20 barrios, discretos, solo para reconocer la ciudad
+    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(93,107,120,.30)"; ctx.fillStyle = "rgba(19,27,35,.55)";
+    for (const p of POLYS) {
+      ctx.beginPath();
+      for (let i = 0; i < p.length; i++) {
+        const q = iso(p[i][0], p[i][1], 0);
+        i ? ctx.lineTo(sx(q), sy(q)) : ctx.moveTo(sx(q), sy(q));
+      }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+
+    const half = SIDE / 2;
+    let tot = 0, emp = 0, ful = 0;
+    for (const i of order) {
+      const s = S[i], v = bikes[i], cap = s.c || 1;
+      const nb = Math.round(v);
+      tot += nb; if (nb <= 0) emp++; if (nb >= cap) ful++;
+
+      basePlate(s, half);   // ancla la estación aunque no tenga ni una bici
+      if (v > .05) column(s, v * M_PER_BIKE, half, ramp(Math.min(1, v / cap)));
+      else emptyMark(s, half);
+    }
+
+    el.time.textContent = fTime.format(new Date(fr.t + "Z"));
+    el.day.textContent = fDay.format(new Date(fr.t + "Z"));
+    el.tot.textContent = tot;
+    el.emp.innerHTML = emp + '<small>/' + N + '</small>';
+    el.ful.innerHTML = ful + '<small>/' + N + '</small>';
+    const pct = (pos / (NF - 1)) * 100;
+    el.scrub.value = String(Math.round(pct));
+    el.scrub.style.setProperty("--pct", pct.toFixed(1) + "%");
+    if (hover >= 0) placeTip();
+  }
+
+  function quad(a, b, c, d, fill) {
+    ctx.beginPath(); ctx.moveTo(sx(a), sy(a)); ctx.lineTo(sx(b), sy(b));
+    ctx.lineTo(sx(c), sy(c)); ctx.lineTo(sx(d), sy(d)); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill();
+  }
+  function column(s, h, half, c) {
+    const x = s.x, y = s.y;
+    // cara izquierda, cara derecha, tapa: tres tonos del mismo color dan el volumen
+    quad(iso(x-half,y+half,0), iso(x-half,y+half,h), iso(x+half,y+half,h), iso(x+half,y+half,0), shade(c,.58));
+    quad(iso(x+half,y+half,0), iso(x+half,y+half,h), iso(x+half,y-half,h), iso(x+half,y-half,0), shade(c,.78));
+    quad(iso(x-half,y+half,h), iso(x-half,y-half,h), iso(x+half,y-half,h), iso(x+half,y+half,h), shade(c,1.12));
+  }
+  function basePlate(s, half) {
+    const x = s.x, y = s.y;
+    quad(iso(x-half,y-half,0), iso(x+half,y-half,0), iso(x+half,y+half,0), iso(x-half,y+half,0),
+         "rgba(93,107,120,.22)");
+  }
+  function emptyMark(s, half) {                 // vacía: la ausencia también se dibuja
+    const c = iso(s.x, s.y, 0);
+    ctx.strokeStyle = "var(--empty)"; ctx.strokeStyle = "#e66767"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(sx(c), sy(c), 3.6, 0, 6.284); ctx.stroke();
+  }
+
+  // --- hover: la tapa de cada columna es el blanco ---
+  let hover = -1, mx = 0, my = 0;
+  function hit(px, py) {
+    let best = -1, bd = 22 * 22;
+    for (let i = 0; i < N; i++) {
+      const p = iso(S[i].x, S[i].y, Math.max(bikes[i], 1) * M_PER_BIKE);
+      const dx = sx(p) - px, dy = sy(p) - py, d = dx*dx + dy*dy;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+  function placeTip() {
+    const s = S[hover], v = Math.round(bikes[hover]), cap = s.c;
+    const r = v / (cap || 1);
+    const estado = v <= 0 ? "sin bicis" : v >= cap ? "sin anclajes libres"
+                 : r < .25 ? "casi vacía" : r > .75 ? "casi llena" : "equilibrada";
+    el.tip.innerHTML = '<div class="n">' + s.n + '</div><div class="d">' +
+      v + " / " + cap + " bicis · " + estado + "</div>";
+    el.tip.style.left = mx + "px";
+    el.tip.style.top = (my - 14) + "px";
+    el.tip.style.opacity = "1";
+  }
+  cvs.addEventListener("pointermove", (e) => {
+    mx = e.clientX; my = e.clientY;
+    const h = hit(mx, my);
+    if (h !== hover) { hover = h; if (h < 0) el.tip.style.opacity = "0"; }
+    if (hover >= 0) placeTip();
+  });
+  cvs.addEventListener("pointerleave", () => { hover = -1; el.tip.style.opacity = "0"; });
+
+  // --- reproducción ---
+  function setPlaying(p) {
+    playing = p;
+    el.play.textContent = p ? "Pausa" : "Reproducir";
+    if (p) { last = performance.now(); requestAnimationFrame(tick); }
+  }
+  function tick(now) {
+    if (!playing) return;
+    const dt = now - last; last = now;
+    pos += dt / SPF;
+    if (pos >= NF - 1) { pos = 0; }
+    draw();
+    requestAnimationFrame(tick);
+  }
+  el.play.addEventListener("click", () => setPlaying(!playing));
+  el.scrub.addEventListener("input", () => {
+    setPlaying(false);
+    pos = (+el.scrub.value / 100) * (NF - 1);
+    draw();
+  });
+  addEventListener("keydown", (e) => {
+    if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
+    else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+1); draw(); }
+    else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-1); draw(); }
+  });
+  addEventListener("resize", resize);
+
+  const horas = ((new Date(F[NF-1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
+  el.speed.textContent = horas + " h · " + NF + " frames";
+  resize();
+  if (!reduce) setPlaying(true);
+})();
+</script>
