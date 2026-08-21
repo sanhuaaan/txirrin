@@ -53,6 +53,10 @@ h1 em{font-style:italic; font-weight:500; color:var(--ink-2)}
 .stat .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:16px}
 .stat .v small{font-size:11px; color:var(--ink-3)}
 .dot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px}
+.pulse{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px;
+       background:#5fd08a; animation:blip 2.4s ease-in-out infinite}
+@keyframes blip{0%,100%{opacity:1}50%{opacity:.28}}
+@media (prefers-reduced-motion:reduce){ .pulse{animation:none} }
 
 /* ---- leyenda ---- */
 #legend{left:var(--space); bottom:calc(var(--space) + 74px); max-width:270px}
@@ -115,6 +119,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 </div>
 
 <div class="overlay" id="stats">
+  <div class="stat" id="s-live" hidden><span class="k"><span class="pulse"></span>Última captura</span><span class="v" id="s-age">—</span></div>
   <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
@@ -139,15 +144,34 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 <div id="tip" role="status" aria-live="polite"></div>
 
 <script>
-const DATA = __DATA__;
+const EMBEDDED   = __DATA__;      // objeto en la versión estática, null en la viva
+const SRC        = "__SRC__";     // ruta al JSON cuando los datos son remotos
+const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
 </script>
 <script>
-(() => {
+(async () => {
   "use strict";
   const cvs = document.getElementById("c"), ctx = cvs.getContext("2d");
-  const S = DATA.stations, F = DATA.frames, POLYS = DATA.polys;
-  const N = S.length, NF = F.length;
-  const HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
+
+  const load = async () => {
+    const r = await fetch(SRC + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
+  let DATA = EMBEDDED;
+  if (!DATA) {
+    try { DATA = await load(); }
+    catch (e) {
+      document.getElementById("time").textContent = "sin datos";
+      document.getElementById("day").textContent = "no se pudo cargar el histórico";
+      return;
+    }
+  }
+  const S = DATA.stations, POLYS = DATA.polys;
+  let F = DATA.frames;
+  const N = S.length;
+  let NF = F.length;
+  let HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // --- proyección axonométrica: azimut (giro) + elevación (inclinación) ---
@@ -262,6 +286,7 @@ const DATA = __DATA__;
   const el = { time: document.getElementById("time"), day: document.getElementById("day"),
                tot: document.getElementById("s-tot"), emp: document.getElementById("s-emp"),
                ful: document.getElementById("s-ful"), scrub: document.getElementById("scrub"),
+               live: document.getElementById("s-live"), age: document.getElementById("s-age"),
                play: document.getElementById("play"), speed: document.getElementById("speed"),
                tip: document.getElementById("tip") };
   const fTime = new Intl.DateTimeFormat("es-ES", { timeZone:"Europe/Madrid", hour:"2-digit", minute:"2-digit", hour12:false });
@@ -316,6 +341,12 @@ const DATA = __DATA__;
     el.time.textContent = fTime.format(new Date(fr.t + "Z"));
     el.day.textContent = fDay.format(new Date(fr.t + "Z"));
     el.tot.textContent = tot;
+    if (SRC) {                                   // en la web viva, edad del último dato
+      const mins = Math.round((Date.now() - new Date(F[NF - 1].t + "Z")) / 6e4);
+      el.live.hidden = false;
+      el.age.textContent = mins < 1 ? "ahora" : mins < 60 ? "hace " + mins + " min"
+                          : "hace " + Math.floor(mins / 60) + " h";
+    }
     el.emp.innerHTML = emp + '<small>/' + N + '</small>';
     el.ful.innerHTML = ful + '<small>/' + N + '</small>';
     const pct = (pos / (NF - 1)) * 100;
@@ -509,6 +540,23 @@ const DATA = __DATA__;
     else if (e.key === "ArrowDown") { e.preventDefault(); setTilt(tilt - 0.06); draw(); }
   });
   addEventListener("resize", resize);
+
+  // --- refresco: solo se cambian los frames ---
+  async function refresh() {
+    let fresh;
+    try { fresh = await load(); } catch (e) { return; }   // un fallo de red no rompe la página
+    if (fresh.stations.length !== N || fresh.stations.some((s, i) => s.id !== S[i].id)) {
+      location.reload(); return;                          // cambió la red: recarga limpia
+    }
+    const atEdge = pos >= NF - 1.01;                      // ¿estaba mirando el directo?
+    const seen = F[Math.min(NF - 1, Math.round(pos))].t;
+    F = fresh.frames; NF = F.length;
+    HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
+    if (atEdge) pos = NF - 1;
+    else { const i = F.findIndex(f => f.t >= seen); pos = i < 0 ? NF - 1 : i; }
+    draw();
+  }
+  if (SRC && REFRESH_MS > 0) setInterval(refresh, REFRESH_MS);
 
   resize();
   if (!reduce) setPlaying(true);

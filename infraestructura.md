@@ -40,6 +40,7 @@ Estado a 2026-08-21. Coste total: **0 €/mes**.
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → GCS `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
 | `weather.sh` | 04:45 día 2 de cada mes | Re-carga idempotente de Euskalmet (XML oficiales): **año anterior + actual** (con suelo en 2026) — los meses finales de un año se publican ya entrado el siguiente; los meses repetidos insertan 0 y los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
+| `publish_viz.sh` | cada 5 min (`:02`, `:07`…) | Regenera el JSON del timelapse (ventana de 24 h) y lo sube al bucket **público** de visualización | `~/viz.log` |
 | `openmeteo.sh` | 05:40 diario | Últimos 7 días horarios de Open-Meteo → `weather_measurement` (DO UPDATE: el modelo revisa). Admite argumento: `openmeteo.sh 30` para una caída larga, o `openmeteo.sh 2026-07-01 2026-08-21` para rehacer un rango vía API de archivo | `~/openmeteo.log` |
 
 `ingest_raw.sh [YYYYMMDD ...]` no es un cron: es la red de seguridad. Si Postgres estuvo caído, el crudo del disco sigue ahí y esto lo reingesta (idempotente; salta ficheros truncados o vacíos y rellena `fetched_at` desde el nombre del fichero). Estrenado el 2026-08-21: recuperó 3 snapshots perdidos por un `OperationalError` del collector.
@@ -71,10 +72,21 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --command='. ~/.dbizi.env
 
 Migrar el esquema **antes** de copiar los `.py`: el collector corre cada 2 min y fallaría al escribir una columna que aún no existe. Crudo de eventos en `~/events/` (sin normalizar: la fase de eventos aún no ha llegado; se archiva porque Kulturklik purga el pasado).
 
+## Web viva del timelapse
+
+**https://storage.googleapis.com/cosas-con-datos-en-dbizi-viz/index.html** — el timelapse leyendo datos frescos, no una foto congelada.
+
+- La VM **no abre ningún puerto**: `publish_viz.sh` regenera el JSON y lo sube; el bucket sirve ficheros estáticos. Postgres sigue escuchando solo en localhost, así que no hay superficie de ataque nueva.
+- Bucket **`cosas-con-datos-en-dbizi-viz`, separado del de backups**. Los permisos públicos en GCS son a nivel de bucket: meter esto en el de backups habría hecho públicos los dumps.
+- La página recarga `data.json` cada 2 min y muestra la edad del último dato. Todo va con `--gzip-local-all`: 26 KB → 9,8 KB la página, 75 KB → 16 KB el JSON.
+- El cron va a minutos impares (`2-59/5`) para no coincidir con el collector, que va a pares.
+- Ventana de 24 h por defecto; `VENTANA_H=48 ~/publish_viz.sh` publica más.
+- Si la red de estaciones cambia (altas o bajas), la página se recarga sola en el siguiente refresco.
+
 ## Backups y restauración
 
 - **Qué**: dump diario `pg_dump -Fc` (retención 14 días vía lifecycle **acotada con `matchesPrefix: ["dumps/"]`** — verificado 2026-08-21: el crudo y los eventos no caducan) + crudo Dbizi del día anterior + cosechas de eventos (ambos permanentes; el crudo permite re-procesar cualquier campo no normalizado hoy).
-- **Dónde**: `gs://cosas-con-datos-en-dbizi-backup` (us-west1, dentro de los 5 GB free).
+- **Dónde**: `gs://cosas-con-datos-en-dbizi-backup` (us-west1, dentro de los 5 GB free). **Privado**, y verificado que sigue siéndolo tras crear el bucket público de visualización.
 - **Pérdida máxima asumida**: 24 h de snapshots.
 - **Restauración** (VM muerta):
   1. Recrear VM (misma receta: e2-micro us-west1, scope `storage-rw`) + Docker + compose de `/opt/dbizi/` (recrear `.env` con contraseña nueva).

@@ -87,9 +87,18 @@ def main():
     ap.add_argument("stations"); ap.add_argument("measurements")
     ap.add_argument("--minutes", type=int, default=5, help="paso de la rejilla (def. 5)")
     ap.add_argument("--out", default=os.path.join(ROOT, "viz", "timelapse.html"))
+    ap.add_argument("--geo", default=os.path.join(ROOT, "viz", "donostia-barrios.json"),
+                    help="geometría de barrios (en la VM los ficheros van planos)")
+    ap.add_argument("--tpl", default=os.path.join(ROOT, "viz", "timelapse.tpl.html"))
+    ap.add_argument("--json-only", metavar="RUTA",
+                    help="escribe solo el JSON de datos, sin HTML (para la web viva)")
+    ap.add_argument("--src", default="",
+                    help="si se indica, el HTML NO lleva los datos dentro: los pide a esta ruta")
+    ap.add_argument("--refresh", type=int, default=0,
+                    help="segundos entre refrescos cuando se usa --src (0 = ninguno)")
     a = ap.parse_args()
 
-    geo = json.load(open(os.path.join(ROOT, "viz", "donostia-barrios.json"), encoding="utf-8"))
+    geo = json.load(open(a.geo, encoding="utf-8"))
     # mismo centro que la geometría, o los barrios saldrían desplazados
     st, center = load_stations(a.stations, tuple(geo["center"]))
     frames = build_frames(a.measurements, st, a.minutes)
@@ -97,16 +106,30 @@ def main():
     data = {"center": list(center), "polys": geo["polys"],
             "stations": [{k: s[k] for k in ("id", "n", "x", "y", "c")} for s in st],
             "frames": frames}
-    tpl = open(os.path.join(ROOT, "viz", "timelapse.tpl.html"), encoding="utf-8").read()
-    if "__DATA__" not in tpl:
-        sys.exit("la plantilla no tiene el marcador __DATA__")
-    os.makedirs(os.path.dirname(a.out), exist_ok=True)
-    with open(a.out, "w", encoding="utf-8") as f:
-        f.write(tpl.replace("__DATA__", json.dumps(data, separators=(",", ":"),
-                                                   ensure_ascii=False)))
+    blob = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     span = (datetime.fromisoformat(frames[-1]["t"]) - datetime.fromisoformat(frames[0]["t"]))
-    print(f"{a.out}: {len(st)} estaciones, {len(frames)} frames de {a.minutes} min "
-          f"({span.total_seconds()/3600:.0f} h), {os.path.getsize(a.out)/1024:.0f} KB")
+    resumen = (f"{len(st)} estaciones, {len(frames)} frames de {a.minutes} min "
+               f"({span.total_seconds()/3600:.0f} h)")
+
+    if a.json_only:
+        with open(a.json_only, "w", encoding="utf-8") as f:
+            f.write(blob)
+        print(f"{a.json_only}: {resumen}, {os.path.getsize(a.json_only)/1024:.0f} KB")
+        return
+
+    tpl = open(a.tpl, encoding="utf-8").read()
+    for marca in ("__DATA__", "__SRC__", "__REFRESH__"):
+        if marca not in tpl:
+            sys.exit(f"la plantilla no tiene el marcador {marca}")
+    html = (tpl.replace("__DATA__", "null" if a.src else blob)
+               .replace("__SRC__", a.src)
+               .replace("__REFRESH__", str(a.refresh * 1000)))
+    if os.path.dirname(a.out):
+        os.makedirs(os.path.dirname(a.out), exist_ok=True)
+    with open(a.out, "w", encoding="utf-8") as f:
+        f.write(html)
+    modo = f"datos desde {a.src} cada {a.refresh}s" if a.src else "datos embebidos"
+    print(f"{a.out}: {resumen}, {os.path.getsize(a.out)/1024:.0f} KB — {modo}")
 
 
 if __name__ == "__main__":
