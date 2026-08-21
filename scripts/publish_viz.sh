@@ -9,6 +9,14 @@ VENTANA_H=${VENTANA_H:-24}
 BUCKET=gs://cosas-con-datos-en-dbizi-viz
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
+# gcloud escribe su narracion por STDERR, asi que ">/dev/null" no la calla y
+# "2>/dev/null" se tragaria los errores de verdad. Se captura y solo se habla
+# si falla: exito en silencio, fallo integro en el log.
+gcs() {
+  local out
+  if ! out=$(gcloud storage "$@" 2>&1); then printf '%s\n' "$out" >&2; return 1; fi
+}
+
 Q() { sudo docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" dbizi-postgres-1 \
         psql -U dbizi -d dbizi -tAF, -c "$1"; }
 
@@ -26,6 +34,5 @@ python3 ~/build_timelapse.py "$TMP/stations.csv" "$TMP/meas.csv" \
 
 # gzip local (no "in flight"): asi el OBJETO queda comprimido y se sirve con
 # content-encoding gzip. 75 KB pasan a 16 KB en el cable. Cache corta: el dato caduca rapido.
-# stdout a /dev/null: gcloud narra cada copia y el log debe recoger solo errores
-gcloud storage cp -q --gzip-local-all --cache-control="public, max-age=60" \
-  "$TMP/data.json" "$BUCKET/data.json" > /dev/null
+gcs cp -q --gzip-local-all --cache-control="public, max-age=60" \
+  "$TMP/data.json" "$BUCKET/data.json"
