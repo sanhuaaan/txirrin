@@ -34,7 +34,7 @@ Sin servidor, coste cero: el repo público [`sanhuaaan/dbizi-raw`](https://githu
 
 ## VM (creada 2026-08-20) ✅
 
-- **`dbizi-vm`** — e2-micro free tier, zona `us-west1-a`, Ubuntu 24.04, 30 GB pd-standard, IP pública efímera `34.53.18.193` (cambia si la VM se para/arranca).
+- **`dbizi-vm`** — e2-micro free tier, zona `us-west1-a`, Ubuntu 24.04, 30 GB pd-standard, IP pública efímera (cambia si la VM se para/arranca — no depender de ella; acceso siempre vía `gcloud compute ssh`).
 - Proyecto GCP: `cosas-con-datos-en-dbizi` (cuenta personal). En local, configuración gcloud separada: `--configuration=dbizi` (la de trabajo `default` queda intacta).
 - SSH: `gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi`
 - **Alerta de presupuesto: 1 €** (avisa al 50% y 100%) sobre la cuenta de facturación. Vigilar el primer email: desde 2024 Google cobra las IPv4 externas en uso (~3 €/mes) y no está claro si exime al free tier — si aparece ese cargo, reevaluar (a ese precio, Hetzner da 4 GB de RAM).
@@ -77,4 +77,5 @@ Esquema ampliado y re-backfilleado desde el historial completo de git antes de r
 4. ✅ Esquema + backfill del histórico de git.
 5. ✅ Captura directa cada 2 min con crudo en disco (sustituye al collector Spring Boot: no aporta nada sobre esto en una VM de 1 GB).
 6. Meteo: carga del histórico 10-min de C017 Miramón + notebook de exploración cuando haya ~2-3 semanas de datos.
-7. Backup periódico `pg_dump` + `~/raw/` a GCS (5 GB free) — pendiente, gana importancia al retirar dbizi-raw.
+7. ✅ Backup diario a GCS (2026-08-21): [`scripts/backup.sh`](scripts/backup.sh) en cron de la VM a las 04:10 UTC → `gs://cosas-con-datos-en-dbizi-backup` (bucket us-west1, dentro de los 5 GB free). Dumps `pg_dump -Fc` con **retención 14 días** (lifecycle del bucket); crudo del día anterior a `raw/YYYYMMDD/`, conservado siempre. La VM necesitó el scope `storage-rw` (parada breve el 2026-08-21). Pérdida máxima asumida: 24 h de snapshots.
+8. Meteo (punto 6) y notebook: siguiente hito.
