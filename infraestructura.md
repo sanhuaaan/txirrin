@@ -40,7 +40,7 @@ Estado a 2026-08-21. Coste total: **0 €/mes**.
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → GCS `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
 | `weather.sh` | 04:45 día 2 de cada mes | Re-carga idempotente de Euskalmet (XML oficiales): **año anterior + actual** (con suelo en 2026) — los meses finales de un año se publican ya entrado el siguiente; los meses repetidos insertan 0 y los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
-| `openmeteo.sh` | 05:40 diario | Últimos 7 días horarios de Open-Meteo → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
+| `openmeteo.sh` | 05:40 diario | Últimos 7 días horarios de Open-Meteo → `weather_measurement` (DO UPDATE: el modelo revisa). Admite argumento: `openmeteo.sh 30` para una caída larga, o `openmeteo.sh 2026-07-01 2026-08-21` para rehacer un rango vía API de archivo | `~/openmeteo.log` |
 
 `ingest_raw.sh [YYYYMMDD ...]` no es un cron: es la red de seguridad. Si Postgres estuvo caído, el crudo del disco sigue ahí y esto lo reingesta (idempotente; salta ficheros truncados o vacíos y rellena `fetched_at` desde el nombre del fichero). Estrenado el 2026-08-21: recuperó 3 snapshots perdidos por un `OperationalError` del collector.
 
@@ -81,7 +81,7 @@ Migrar el esquema **antes** de copiar los `.py`: el collector corre cada 2 min y
   2. `psql < sql/schema.sql && psql < sql/holidays.sql`
   3. `gcloud storage cp gs://.../dumps/<último>.dump . && pg_restore -U dbizi -d dbizi --data-only <dump>`
   4. `gcloud storage rsync -r gs://.../raw ~/raw` (y `events/` igual); re-instalar crons (tabla de arriba).
-  5. El hueco entre dump y presente no es recuperable (Dbizi no ofrece histórico); la meteo sí rellena (Open-Meteo archive / XML oficial).
+  5. El hueco entre dump y presente no es recuperable (Dbizi no ofrece histórico); la meteo sí: `./openmeteo.sh <inicio> <fin>` rehace el tramo desde la API de archivo (va ~2 días por detrás; para lo más reciente, `./openmeteo.sh <días>`), y `./weather.sh` recarga los XML oficiales de C017.
 
 ## Operación
 
