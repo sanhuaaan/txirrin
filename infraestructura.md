@@ -38,7 +38,7 @@ Estado a 2026-08-21. Coste total: **0 €/mes**.
 |------|--------------|----------|-----|
 | `collect.sh` | cada 2 min | GBFS → `dbizi_measurement` + crudo gzip a `~/raw/` (`station_information` 1×/día) | `~/collect.log` |
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → GCS `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
-| `weather.sh` | 04:45 día 2 de cada mes | Re-carga idempotente del año en curso de Euskalmet (XML oficiales) | `~/weather.log` |
+| `weather.sh` | 04:45 día 2 de cada mes | Re-carga idempotente de Euskalmet (XML oficiales): **año anterior + actual** (con suelo en 2026) — los meses finales de un año se publican ya entrado el siguiente; los meses repetidos insertan 0 y los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
 | `openmeteo.sh` | 05:40 diario | Últimos 7 días horarios de Open-Meteo → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
 
