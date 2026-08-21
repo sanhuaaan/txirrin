@@ -42,9 +42,13 @@ Estado a 2026-08-21. Coste total: **0 €/mes**.
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
 | `openmeteo.sh` | 05:40 diario | Últimos 7 días horarios de Open-Meteo → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
 
-`ingest_raw.py` no es un cron: es la red de seguridad. Si Postgres estuvo caído, el crudo del disco sigue ahí y `./ingest_raw.py [YYYYMMDD ...]` lo reingesta (idempotente, salta ficheros truncados).
+`ingest_raw.sh [YYYYMMDD ...]` no es un cron: es la red de seguridad. Si Postgres estuvo caído, el crudo del disco sigue ahí y esto lo reingesta (idempotente; salta ficheros truncados o vacíos y rellena `fetched_at` desde el nombre del fichero). Estrenado el 2026-08-21: recuperó 3 snapshots perdidos por un `OperationalError` del collector.
 
-Los logs solo recogen errores (los scripts callan si todo va bien). Los `*.sh` son wrappers que cargan `~/.dbizi.env` (copia de las credenciales para cron).
+`ingest.sh` es el equivalente para el clon git de `dbizi-raw` (`backfill.py`), ya solo de valor histórico.
+
+Los wrappers `*.sh` viven en `scripts/` del repo y se copian a `~` de la VM junto a los `.py`; cargan `~/.dbizi.env`, que no está versionado.
+
+Los logs solo recogen errores (los scripts callan si todo va bien).
 
 ## Tablas (BD `dbizi`, esquema en `sql/schema.sql`)
 
@@ -56,11 +60,20 @@ Los logs solo recogen errores (los scripts callan si todo va bien). Los `*.sh` s
 | `weather_measurement` | `C017`: 10-min, ene→jun 2026 (lo último publicado). `OPENMETEO`: horaria, jul 2026→hoy. **Empalme sin hueco**; el análisis prefiere C017 donde exista. ⚠️ `precipitation` son mm acumulados en `interval_minutes` (10 vs 60): para comparar umbrales entre series, `precipitation * 60.0 / interval_minutes` | 26k + 1,2k filas |
 | `holiday` | Festivos Donostia/Gipuzkoa a mano (`sql/holidays.sql`); añadir cada diciembre el año siguiente | 15 filas (2026) |
 
-Los fuentes viven en este repo (`sql/`, `scripts/`) y se copian a la VM con `gcloud compute scp`. `sql/schema.sql` es **re-ejecutable**: sus `ALTER ... IF NOT EXISTS` finales migran una BD ya poblada, así que desplegar un cambio de esquema es copiar y volver a lanzarlo. Crudo de eventos en `~/events/` (sin normalizar: la fase de eventos aún no ha llegado; se archiva porque Kulturklik purga el pasado).
+Los fuentes viven en este repo (`sql/`, `scripts/`) y se copian **planos a `~`** de la VM (no hay subdirectorios allí) con `gcloud compute scp`. `sql/schema.sql` es **re-ejecutable**: sus `ALTER ... IF NOT EXISTS` finales migran una BD ya poblada, así que desplegar un cambio de esquema es copiar y volver a lanzarlo:
+
+```bash
+gcloud compute scp sql/schema.sql scripts/*.py scripts/*.sh dbizi-vm:~/ --zone=us-west1-a
+gcloud compute ssh dbizi-vm --zone=us-west1-a --command='. ~/.dbizi.env
+  sudo docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" dbizi-postgres-1 \
+    psql -U dbizi -d dbizi -v ON_ERROR_STOP=1 -f - < ~/schema.sql'
+```
+
+Migrar el esquema **antes** de copiar los `.py`: el collector corre cada 2 min y fallaría al escribir una columna que aún no existe. Crudo de eventos en `~/events/` (sin normalizar: la fase de eventos aún no ha llegado; se archiva porque Kulturklik purga el pasado).
 
 ## Backups y restauración
 
-- **Qué**: dump diario `pg_dump -Fc` (retención 14 días, lifecycle del bucket) + crudo Dbizi del día anterior + cosechas de eventos (ambos permanentes; el crudo permite re-procesar cualquier campo no normalizado hoy).
+- **Qué**: dump diario `pg_dump -Fc` (retención 14 días vía lifecycle **acotada con `matchesPrefix: ["dumps/"]`** — verificado 2026-08-21: el crudo y los eventos no caducan) + crudo Dbizi del día anterior + cosechas de eventos (ambos permanentes; el crudo permite re-procesar cualquier campo no normalizado hoy).
 - **Dónde**: `gs://cosas-con-datos-en-dbizi-backup` (us-west1, dentro de los 5 GB free).
 - **Pérdida máxima asumida**: 24 h de snapshots.
 - **Restauración** (VM muerta):
@@ -101,6 +114,8 @@ Credenciales BD: `/opt/dbizi/.env` (root, 600) y `~/.dbizi.env` (usuario, para c
 
 - **2026-08-20** — Arranque sin servidor: git-scraping en repo público `dbizi-raw` (Actions + cron-job.org al fallar el cron nativo de GitHub). Oracle Always Free descartada (registro imposible) → GCP e2-micro. PostGIS en Docker; backfill del historial git.
 - **2026-08-21** — Captura directa cada 2 min con crudo a disco (el collector Spring Boot previsto quedó innecesario); esquema con salud de estaciones. **`dbizi-raw` y cron-job.org retirados** (crecimiento de GitHub); su clon queda en `~/dbizi-raw` de la VM como archivo. Backup diario a GCS. Capa de contexto: meteo (C017 **solo 2026** — 14 años ahogaban la VM y no aportaban frente a un histórico de bicis que nace en ago-2026 — + Open-Meteo para el desfase de publicación), festivos y cosecha diaria de Kulturklik.
+
+- **2026-08-21 (tarde)** — Desplegado `fetched_at` + `interval_minutes` (ver `sql/schema.sql`), reingesta del crudo con `ingest_raw.sh` y wrappers de cron versionados en el repo. Verificada la lifecycle del bucket.
 
 ## Siguiente hito
 
