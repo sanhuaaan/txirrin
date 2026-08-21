@@ -39,9 +39,21 @@ Sin servidor, coste cero: el repo público [`sanhuaaan/dbizi-raw`](https://githu
 - SSH: `gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi`
 - **Alerta de presupuesto: 1 €** (avisa al 50% y 100%) sobre la cuenta de facturación. Vigilar el primer email: desde 2024 Google cobra las IPv4 externas en uso (~3 €/mes) y no está claro si exime al free tier — si aparece ese cargo, reevaluar (a ese precio, Hetzner da 4 GB de RAM).
 
+## PostGIS en la VM (2026-08-20) ✅
+
+- Docker + compose en `/opt/dbizi/` de la VM: contenedor `postgis/postgis:16-3.4`, `restart: always`, volumen `pgdata`.
+- BD `dbizi`, usuario `dbizi`; contraseña en `/opt/dbizi/.env` de la VM (no está en este repo).
+- Puerto 5432 **solo en localhost de la VM** — nada expuesto a internet. Acceso desde el portátil por túnel:
+
+```bash
+gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi -- -L 5432:localhost:5432 -N
+# y en otra terminal: psql -h localhost -U dbizi dbizi
+```
+
 ## Plan
 
 1. ✅ Git-scraping activo (cron-job.org cada 5 min).
 2. ✅ VM GCP free tier creada y verificada por SSH.
-3. Docker compose (postgis, opcional Grafana) + collector real en la VM.
-4. Backfill del historial de `dbizi-raw` a Postgres.
+3. ✅ PostGIS 3.4 / Postgres 16 en Docker en la VM.
+4. Esquema mínimo + backfill del historial de `dbizi-raw` a Postgres.
+5. Collector real (Spring Boot) en la VM; git-scraping queda de redundancia.
