@@ -26,5 +26,6 @@ python3 ~/build_timelapse.py "$TMP/stations.csv" "$TMP/meas.csv" \
 
 # gzip local (no "in flight"): asi el OBJETO queda comprimido y se sirve con
 # content-encoding gzip. 75 KB pasan a 16 KB en el cable. Cache corta: el dato caduca rapido.
+# stdout a /dev/null: gcloud narra cada copia y el log debe recoger solo errores
 gcloud storage cp -q --gzip-local-all --cache-control="public, max-age=60" \
-  "$TMP/data.json" "$BUCKET/data.json"
+  "$TMP/data.json" "$BUCKET/data.json" > /dev/null
