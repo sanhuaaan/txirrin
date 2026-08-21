@@ -115,6 +115,40 @@ tenerlo presente desde el diseño, no descubrirlo al final.
 
 ---
 
+## Dónde entran las demás fuentes: covariables de la deriva
+
+La capa de contexto (meteo, calendario, eventos) deja de ser solo *explicativa* y pasa a ser el
+insumo del modelo de deriva de la etapa 3. Y para planificar hay una línea divisoria que importa
+más que la fuente en sí: **qué se conoce a las 06:00, cuando se decide la colocación**.
+
+| Fuente | ¿Conocida al decidir? | Papel en la deriva |
+|---|---|---|
+| Calendario laboral | Perfectamente, sin incertidumbre | El predictor más barato y fiable: la marea de un martes no es la de un domingo. Ya está (`holiday`) |
+| Eventos | Sí — fecha y hora por adelantado | Efecto **localizado**: llena las estaciones cercanas al recinto antes y las vacía después (o al revés). Activa la tabla `venue → coords` pendiente de Fase 0 |
+| Meteo **predicha** | Sí, pero con error | La lluvia de mañana cambia la marea de mañana; el plan de las 06:00 solo puede usar la predicción |
+| Meteo observada | Solo a posteriori | Entrena el modelo y explica el pasado; **no sirve para decidir** |
+| Incidencias/obras | Parcialmente | Cambios locales de deriva mientras duran |
+
+Un detalle que ya está en la infraestructura: `pull_openmeteo.py` **descarga la predicción cada
+día y la tira** (`forecast_days=1`, y el bucle descarta `ts > now` porque "el tramo futuro es
+predicción, no observación"). El descarte es correcto para la serie de observación — y significa
+que empezar a archivar predicciones es cambiar un descarte, no montar nada nuevo.
+
+Tres reglas de higiene si se archivan predicciones:
+
+- **Nunca mezclarlas con la observación**: serie aparte, con hora de emisión y horizonte. Una fila
+  de predicción debe poder responder «¿qué se creía a las 06:00 del martes sobre las 14:00 del
+  martes?».
+- **Entrenar como se va a decidir**: si el plan usará predicción, validarlo con la predicción que
+  había en ese momento, no con la observación (que nadie tenía). El error de predicción es parte
+  del sistema, no ruido ignorable.
+- La pregunta operativa de la meteo no es «¿llueve → menos uso?» sino **¿la lluvia cambia la
+  *forma* de la marea o solo su volumen?** Si reduce todo uniformemente, la colocación de las
+  06:00 apenas cambia; si desplaza el modo de transporte de forma asimétrica (nadie sube en bici a
+  Bera Bera bajo la lluvia), la cambia mucho.
+
+---
+
 ## Plan por etapas
 
 Cada etapa produce algo útil por sí sola, aunque el proyecto se pare ahí.
@@ -137,7 +171,9 @@ propuesto mejore lo que ya se hace.
 
 Aquí el proyecto se vuelve serio. No hace falta la matriz de viajes ni «replicar la media» del
 histórico: basta la **marea neta por estación y hora**, un objeto mucho más simple. Pero corregida
-de censura — o las etapas siguientes optimizan sobre tasas que se saben sesgadas.
+de censura — o las etapas siguientes optimizan sobre tasas que se saben sesgadas. Las covariables
+de «Dónde entran las demás fuentes» convierten la tabla de tasas en un modelo condicionado:
+día-tipo primero, meteo y eventos después.
 
 ### 4 · Simular y optimizar el reparto
 
