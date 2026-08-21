@@ -21,6 +21,8 @@ DSN = os.environ["DBIZI_DSN"]
 BASE = ("https://opendata.euskadi.eus/contenidos/ds_meteorologicos/"
         "met_stations_ds_{y}/opendata/{y}/{st}/{st}_{y}_{m}.xml")
 
+INTERVAL_MIN = 10  # paso de la serie oficial (verificado: 144 lecturas/día)
+
 STATIONS = {  # id: (nombre, lat, lon) — añadir C007 Santa Clara si algún día hace falta viento de costa
     "C017": ("Miramon", 43.2868, -1.97121),
 }
@@ -69,10 +71,11 @@ def load_month(cur, st, y, m):
                         except ValueError:
                             pass
             cur.execute(
-                f"""INSERT INTO weather_measurement (station_id, ts, {', '.join(COLS)})
-                    VALUES (%s, %s, {', '.join(['%s'] * len(COLS))})
+                f"""INSERT INTO weather_measurement
+                        (station_id, ts, interval_minutes, {', '.join(COLS)})
+                    VALUES (%s, %s, %s, {', '.join(['%s'] * len(COLS))})
                     ON CONFLICT DO NOTHING""",
-                [st, ts] + [vals[c] for c in COLS],
+                [st, ts, INTERVAL_MIN] + [vals[c] for c in COLS],
             )
             rows += 1
     return rows

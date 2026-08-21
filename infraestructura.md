@@ -42,6 +42,8 @@ Estado a 2026-08-21. Coste total: **0 €/mes**.
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
 | `openmeteo.sh` | 05:40 diario | Últimos 7 días horarios de Open-Meteo → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
 
+`ingest_raw.py` no es un cron: es la red de seguridad. Si Postgres estuvo caído, el crudo del disco sigue ahí y `./ingest_raw.py [YYYYMMDD ...]` lo reingesta (idempotente, salta ficheros truncados).
+
 Los logs solo recogen errores (los scripts callan si todo va bien). Los `*.sh` son wrappers que cargan `~/.dbizi.env` (copia de las credenciales para cron).
 
 ## Tablas (BD `dbizi`, esquema en `sql/schema.sql`)
@@ -49,12 +51,12 @@ Los logs solo recogen errores (los scripts callan si todo va bien). Los `*.sh` s
 | Tabla | Contenido | Volumen (2026-08-21) |
 |-------|-----------|----------------------|
 | `dbizi_station` | 70 estaciones: `geom` PostGIS, capacidad, dirección, CP | 70 filas |
-| `dbizi_measurement` | Snapshot cada 2 min por estación: bicis/anclajes disponibles, mecánica/eléctrica, **averiadas** (`vehicles_disabled`), anclajes rotos, overflow, flags. PK `(station_id, ts)` | 18,5k filas (desde 2026-08-20), ~50k/día |
+| `dbizi_measurement` | Snapshot cada 2 min por estación: bicis/anclajes disponibles, mecánica/eléctrica, **averiadas** (`vehicles_disabled`), anclajes rotos, overflow, flags. `ts` = `last_updated` del feed; `fetched_at` = captura real (si el feed se congela, solo esto lo delata). PK `(station_id, ts)` | 18,5k filas (desde 2026-08-20), ~50k/día |
 | `weather_station` | `C017` (Miramón, pluviómetro oficial) y `OPENMETEO` (malla del mismo punto) | 2 filas |
-| `weather_measurement` | `C017`: 10-min, ene→jun 2026 (lo último publicado). `OPENMETEO`: horaria, jul 2026→hoy. **Empalme sin hueco**; el análisis prefiere C017 donde exista | 26k + 1,2k filas |
+| `weather_measurement` | `C017`: 10-min, ene→jun 2026 (lo último publicado). `OPENMETEO`: horaria, jul 2026→hoy. **Empalme sin hueco**; el análisis prefiere C017 donde exista. ⚠️ `precipitation` son mm acumulados en `interval_minutes` (10 vs 60): para comparar umbrales entre series, `precipitation * 60.0 / interval_minutes` | 26k + 1,2k filas |
 | `holiday` | Festivos Donostia/Gipuzkoa a mano (`sql/holidays.sql`); añadir cada diciembre el año siguiente | 15 filas (2026) |
 
-Los fuentes viven en este repo (`sql/`, `scripts/`) y se copian a la VM con `gcloud compute scp`. Crudo de eventos en `~/events/` (sin normalizar: la fase de eventos aún no ha llegado; se archiva porque Kulturklik purga el pasado).
+Los fuentes viven en este repo (`sql/`, `scripts/`) y se copian a la VM con `gcloud compute scp`. `sql/schema.sql` es **re-ejecutable**: sus `ALTER ... IF NOT EXISTS` finales migran una BD ya poblada, así que desplegar un cambio de esquema es copiar y volver a lanzarlo. Crudo de eventos en `~/events/` (sin normalizar: la fase de eventos aún no ha llegado; se archiva porque Kulturklik purga el pasado).
 
 ## Backups y restauración
 
@@ -77,8 +79,10 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi
 # Postgres desde el portátil (túnel; en otra terminal: psql -h localhost -U dbizi dbizi)
 gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi -- -L 5432:localhost:5432 -N
 
-# Salud: la última captura no debería superar ~4 min
-# SELECT max(ts), now() - max(ts) FROM dbizi_measurement;
+# Salud: ninguna de las dos debería superar ~4 min.
+# fetched_at parado = collector caído; ts parado con fetched_at vivo = feed de PBSC congelado.
+# SELECT now() - max(fetched_at) AS desde_captura,
+#        now() - max(ts)         AS desde_dato_feed FROM dbizi_measurement;
 
 # Si el SSH da 255 en cadena: la VM está saturada (ver ⚠️ RAM) → gcloud compute instances reset
 # (todo se auto-levanta: Docker restart:always + crons)
@@ -90,7 +94,7 @@ Credenciales BD: `/opt/dbizi/.env` (root, 600) y `~/.dbizi.env` (usuario, para c
 
 - **La VM es el único punto de captura**: si muere, se pierden ≤24 h (hasta el último backup).
 - **Free tier**: e2-micro en región US, disco *standard*, una VM. Vigilar el primer email de la alerta por el posible cargo de IPv4 (~3 €/mes); si aparece, reevaluar (Hetzner 4 €/mes, 4 GB).
-- **Sin monitorización activa**: un collector caído solo se ve como hueco en `max(ts)`. Pendiente si duele: alerta de envejecimiento.
+- **Sin monitorización activa**: un collector caído solo se ve como hueco en `max(fetched_at)` (que ya distingue collector caído de feed congelado). Pendiente si duele: alerta de envejecimiento.
 - **Meteo oficial con ~2 meses de retraso** (verificado): mitigado con Open-Meteo (reanálisis, no pluviómetro). API tiempo real de Euskalmet pendiente: su portal de registro no envía el correo de confirmación (reintentar algún día; si llega la key, añadir puller oficial y degradar Open-Meteo a respaldo).
 
 ## Historial de decisiones (condensado)

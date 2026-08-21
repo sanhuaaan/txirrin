@@ -4,6 +4,9 @@
 Cron cada 2 min en la VM. Reutiliza el parseo/insert de backfill.py.
 station_status en cada ejecución; station_information (estático) una vez al día.
 Silencioso si todo va bien: el log solo recoge errores.
+
+El crudo se escribe ANTES de tocar la BD a propósito: si Postgres falla (VM saturada),
+el tick sigue en disco y scripts/ingest_raw.py lo reingesta después.
 """
 import gzip
 import json
@@ -45,8 +48,9 @@ def main():
         info_raw = fetch("station_information")
         save_raw(now, "info", info_raw)
         insert_stations(cur, json.loads(info_raw))
-    insert_status(cur, json.loads(status_raw))
+    insert_status(cur, json.loads(status_raw), fetched_at=now)
     conn.commit()
+    conn.close()
 
 
 if __name__ == "__main__":

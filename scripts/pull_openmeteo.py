@@ -2,6 +2,10 @@
 """Meteo reciente vía Open-Meteo (sin key, uso no comercial): tapa el hueco de ~2 meses
 que Open Data Euskadi tarda en publicar los XML oficiales de Miramón.
 
+OJO: serie HORARIA. precipitation son mm acumulados en 1 h, frente a los mm/10min de
+C017 — por eso se guarda interval_minutes: sin él, los umbrales de lluvia no son
+comparables entre las dos series (ver comentario en sql/schema.sql).
+
 Reanálisis horario sobre la malla del punto de Miramón, guardado como estación
 'OPENMETEO' (serie separada de C017; el análisis prefiere C017 donde exista).
 Últimos 7 días en cada ejecución; DO UPDATE porque el modelo revisa valores recientes.
@@ -42,11 +46,12 @@ def main():
             continue  # el tramo futuro es predicción, no observación
         cur.execute(
             """INSERT INTO weather_measurement
-                 (station_id, ts, temperature, precipitation, humidity,
-                  wind_speed, wind_max, wind_dir)
-               VALUES ('OPENMETEO', %s, %s, %s, %s, %s, %s, %s)
+                 (station_id, ts, interval_minutes, temperature, precipitation,
+                  humidity, wind_speed, wind_max, wind_dir)
+               VALUES ('OPENMETEO', %s, 60, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (station_id, ts) DO UPDATE
-                 SET temperature = EXCLUDED.temperature,
+                 SET interval_minutes = EXCLUDED.interval_minutes,
+                     temperature = EXCLUDED.temperature,
                      precipitation = EXCLUDED.precipitation,
                      humidity = EXCLUDED.humidity,
                      wind_speed = EXCLUDED.wind_speed,

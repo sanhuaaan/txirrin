@@ -9,6 +9,7 @@ Uso: DBIZI_DSN="host=localhost dbname=dbizi user=dbizi password=..." ./backfill.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -28,9 +29,12 @@ def git(*args):
 
 
 def parse_ts(v):
-    if isinstance(v, (int, float)):
+    if isinstance(v, (int, float)):  # GBFS v2 daba epoch en segundos
         return datetime.fromtimestamp(v, tz=timezone.utc)
-    return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    # PBSC recorta los ceros de la fracción ("...:56.33Z", "...:56.3Z") y fromisoformat
+    # solo admite 3 o 6 dígitos antes de Python 3.11: reventaba el snapshot completo en
+    # ~13% de las estaciones. La fracción de segundo no aporta nada muestreando cada 2 min.
+    return datetime.fromisoformat(re.sub(r"\.\d+", "", str(v)).replace("Z", "+00:00"))
 
 
 def station_name(st):
@@ -74,20 +78,21 @@ def insert_stations(cur, info):
         )
 
 
-def insert_status(cur, feed):
+def insert_status(cur, feed, fetched_at=None):
+    """fetched_at = instante real de captura; None cuando no se conoce (historial git)."""
     ts = parse_ts(feed["last_updated"])
     rows = 0
     for st in feed["data"]["stations"]:
         mech, elec = type_counts(st)
         cur.execute(
             """INSERT INTO dbizi_measurement
-                 (station_id, ts, bikes_available, docks_available,
+                 (station_id, ts, fetched_at, bikes_available, docks_available,
                   mechanical_available, electric_available,
                   vehicles_disabled, docks_disabled, bikes_overflow,
                   is_installed, is_renting, is_returning, last_reported)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT DO NOTHING""",
-            (st["station_id"], ts,
+            (st["station_id"], ts, fetched_at,
              st.get("num_vehicles_available", st.get("num_bikes_available")),
              st.get("num_docks_available"), mech, elec,
              st.get("num_vehicles_disabled"), st.get("num_docks_disabled"),
