@@ -23,6 +23,7 @@ body{
 #stage{position:fixed; inset:0}
 canvas{display:block; width:100%; height:100%; cursor:grab; touch-action:none}
 canvas.drag{cursor:grabbing}
+canvas.pan{cursor:move}
 
 .overlay{position:fixed; pointer-events:none}
 .overlay > *{pointer-events:auto}
@@ -125,8 +126,8 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="lgd-ends"><span>sin bicis</span><span>equilibrada</span><span>sin sitio</span></div>
   <p class="lgd-note">Los dos extremos son fallos: no hay bici que coger, o no
     hay dónde dejarla. <b>El equilibrio es lo silencioso.</b></p>
-  <p class="lgd-note"><b>Arrastra</b> para girar la ciudad · doble clic para
-    volver al norte · espacio reproduce</p>
+  <p class="lgd-note"><b>Arrastra</b> gira · <b>rueda</b> acerca ·
+    <b>shift+arrastra</b> mueve · <b>doble clic</b> reinicia la vista</p>
 </div>
 
 <div class="overlay" id="ctl">
@@ -146,6 +147,7 @@ const DATA = __DATA__;
   const cvs = document.getElementById("c"), ctx = cvs.getContext("2d");
   const S = DATA.stations, F = DATA.frames, POLYS = DATA.polys;
   const N = S.length, NF = F.length;
+  const HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // --- proyección isométrica: 30°, el ángulo que hace cuadrar las diagonales ---
@@ -182,6 +184,8 @@ const DATA = __DATA__;
   const bb = [-D * COS, -D * SIN - maxH, D * COS, D * SIN];
 
   let W = 0, H = 0, k = 1, ox = 0, oy = 0;
+  let zoom = 1, panX = 0, panY = 0;
+  const MINZ = 1, MAXZ = 8;
   function resize() {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     W = innerWidth; H = innerHeight;
@@ -193,7 +197,30 @@ const DATA = __DATA__;
     oy = padTop + (H - padTop - padBot - (bb[3] - bb[1]) * k) / 2 - bb[1] * k;
     draw();
   }
-  const sx = (p) => p[0] * k + ox, sy = (p) => p[1] * k + oy;
+  const sx = (p) => p[0] * k * zoom + ox + panX;
+  const sy = (p) => p[1] * k * zoom + oy + panY;
+
+  const MG = 0.15;                              // fracción de viewport que
+                                                // siempre debe mostrar ciudad
+  function clampPan() {
+    // Se exige que las cajas se solapen, NO que el centro siga visible:
+    // obligar al centro impide acercarse a una esquina y rompía el anclaje
+    // del zoom al puntero. Esto solo evita perder la ciudad de vista.
+    const T = k * zoom;
+    panX = Math.min(Math.max(panX, W * MG - bb[2] * T - ox), W * (1 - MG) - bb[0] * T - ox);
+    panY = Math.min(Math.max(panY, H * MG - bb[3] * T - oy), H * (1 - MG) - bb[1] * T - oy);
+  }
+  function zoomAt(z2, px, py) {
+    // Se acerca hacia el puntero, no hacia el centro: lo que estás mirando
+    // se queda donde está.
+    z2 = Math.min(MAXZ, Math.max(MINZ, z2));
+    if (Math.abs(z2 - zoom) < 1e-6) return;
+    const r = 1 - z2 / zoom;
+    panX += (px - (ox + panX)) * r;
+    panY += (py - (oy + panY)) * r;
+    zoom = z2; clampPan();
+  }
+  function resetView() { zoom = 1; panX = 0; panY = 0; setRot(0); draw(); }
 
   // --- rampa divergente: rojo (vacía) ← gris (equilibrio) → azul (llena) ---
   const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
@@ -265,6 +292,8 @@ const DATA = __DATA__;
     }
 
     compass();
+    el.speed.textContent = HOURS + " h · " + NF + " frames" +
+      (zoom > 1.01 ? " · " + zoom.toFixed(1) + "\u00d7" : "");
     el.time.textContent = fTime.format(new Date(fr.t + "Z"));
     el.day.textContent = fDay.format(new Date(fr.t + "Z"));
     el.tot.textContent = tot;
@@ -337,36 +366,77 @@ const DATA = __DATA__;
     el.tip.style.top = (my - 14) + "px";
     el.tip.style.opacity = "1";
   }
-  let drag = null;                              // {x, rot} mientras se arrastra
   const RAD_PER_PX = 0.006;                     // ~340 px para un cuarto de vuelta
+  const pointers = new Map();                   // punteros activos, para la pinza
+  let drag = null, pinch = null;
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const mid  = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+  cvs.addEventListener("contextmenu", (e) => e.preventDefault());
 
   cvs.addEventListener("pointerdown", (e) => {
-    drag = { x: e.clientX, rot };
     cvs.setPointerCapture(e.pointerId);
-    cvs.classList.add("drag");
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     hover = -1; el.tip.style.opacity = "0";
+    if (pointers.size === 2) {                  // dos dedos: pinza
+      const [a, b] = [...pointers.values()];
+      pinch = { d: dist(a, b) || 1, m: mid(a, b), zoom, panX, panY };
+      drag = null; cvs.classList.remove("drag", "pan");
+    } else if (pointers.size === 1) {
+      const panning = e.button === 1 || e.button === 2 || e.shiftKey;
+      drag = { x: e.clientX, y: e.clientY, rot, panX, panY, panning };
+      cvs.classList.add(panning ? "pan" : "drag");
+    }
   });
-  const endDrag = (e) => {
-    if (!drag) return;
-    drag = null; cvs.classList.remove("drag");
-    if (e && e.pointerId !== undefined && cvs.hasPointerCapture(e.pointerId))
-      cvs.releasePointerCapture(e.pointerId);
+
+  const endPointer = (e) => {
+    pointers.delete(e.pointerId);
+    if (cvs.hasPointerCapture(e.pointerId)) cvs.releasePointerCapture(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size === 0) { drag = null; cvs.classList.remove("drag", "pan"); }
   };
-  cvs.addEventListener("pointerup", endDrag);
-  cvs.addEventListener("pointercancel", endDrag);
+  cvs.addEventListener("pointerup", endPointer);
+  cvs.addEventListener("pointercancel", endPointer);
 
   cvs.addEventListener("pointermove", (e) => {
     mx = e.clientX; my = e.clientY;
-    if (drag) { setRot(drag.rot + (mx - drag.x) * RAD_PER_PX); draw(); return; }
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: mx, y: my });
+
+    if (pinch && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()], m = mid(a, b);
+      // se parte siempre del estado al iniciar la pinza: así el gesto es
+      // reversible y no acumula deriva
+      zoom = pinch.zoom; panX = pinch.panX; panY = pinch.panY;
+      zoomAt(pinch.zoom * (dist(a, b) / pinch.d), pinch.m.x, pinch.m.y);
+      panX += m.x - pinch.m.x; panY += m.y - pinch.m.y;
+      clampPan(); draw(); return;
+    }
+    if (drag) {
+      if (drag.panning) {
+        panX = drag.panX + (mx - drag.x); panY = drag.panY + (my - drag.y); clampPan();
+      } else {
+        setRot(drag.rot + (mx - drag.x) * RAD_PER_PX);
+      }
+      draw(); return;
+    }
     const h = hit(mx, my);
     if (h !== hover) { hover = h; if (h < 0) el.tip.style.opacity = "0"; }
     if (hover >= 0) placeTip();
   });
+
   cvs.addEventListener("pointerleave", () => {
-    if (drag) return;
+    if (drag || pinch) return;
     hover = -1; el.tip.style.opacity = "0";
   });
-  cvs.addEventListener("dblclick", () => { setRot(0); draw(); });
+
+  cvs.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * H : e.deltaY;
+    zoomAt(zoom * Math.pow(0.9985, dy), e.clientX, e.clientY);
+    draw();
+  }, { passive: false });
+
+  cvs.addEventListener("dblclick", resetView);
 
   // --- reproducción ---
   function setPlaying(p) {
@@ -394,11 +464,12 @@ const DATA = __DATA__;
     else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-1); draw(); }
     else if (e.key === "[") { setRot(rot - Math.PI / 12); draw(); }
     else if (e.key === "]") { setRot(rot + Math.PI / 12); draw(); }
+    else if (e.key === "+" || e.key === "=") { zoomAt(zoom * 1.25, W / 2, H / 2); draw(); }
+    else if (e.key === "-" || e.key === "_") { zoomAt(zoom / 1.25, W / 2, H / 2); draw(); }
+    else if (e.key === "0") { resetView(); }
   });
   addEventListener("resize", resize);
 
-  const horas = ((new Date(F[NF-1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
-  el.speed.textContent = horas + " h · " + NF + " frames";
   resize();
   if (!reduce) setPlaying(true);
 })();
