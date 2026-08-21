@@ -15,3 +15,7 @@ YESTERDAY=$(date -u -d yesterday +%Y%m%d)
 if [ -d "$HOME/raw/$YESTERDAY" ]; then
     gcloud storage rsync -q -r "$HOME/raw/$YESTERDAY" "$BUCKET/raw/$YESTERDAY"
 fi
+
+if [ -d "$HOME/events" ]; then
+    gcloud storage rsync -q -r "$HOME/events" "$BUCKET/events"
+fi
