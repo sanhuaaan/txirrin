@@ -308,7 +308,15 @@ Trabajar con un sistema real, dinámico e imperfecto: APIs, ingestión periódic
 
 > **Los datos que necesitamos no existen exactamente como nos gustaría, así que tenemos que construirlos y decidir cómo interpretarlos.**
 
-## 18. Ideas para jugar
+## 18. Reparto óptimo
+
+El objetivo que da al proyecto un para qué, más allá de describir: usar el histórico para proponer
+un **reparto hipotético en camión** que minimice las estaciones vacías. Documento propio en
+[`reparto-optimo.md`](reparto-optimo.md), con lo que ya se ve en los primeros datos (la periferia
+cuesta arriba se vacía; Dbizi cierra de 00:00 a 06:00; no se detecta camión), el problema
+metodológico de fondo (solo se observa inventario, nunca demanda) y el plan por etapas.
+
+## 19. Ideas para jugar
 
 Sin objetivo analítico — porque sí:
 
@@ -320,7 +328,7 @@ Sin objetivo analítico — porque sí:
   - Lo que se ve con 28 h de datos: el total de la red apenas oscila un 6%, pero 34 de 70 estaciones tocan el cero y 12 se llenan del todo. La historia es la **redistribución**, no el volumen.
   - Pendiente, y es lo que pedía la idea original: *lunes lluvioso vs. lunes seco* lado a lado. Acotar el `WHERE ts` de la consulta ya permite generar cada día por separado; falta tener dos lunes comparables y la vista doble.
 
-## 19. Posicionamiento
+## 20. Posicionamiento
 
 > **Estoy construyendo un sistema para estudiar cómo se comporta la red Dbizi de Donostia: un histórico propio de sus estaciones cruzado con meteorología, calendario, eventos e incidencias para detectar patrones, anomalías y posibles explicaciones.**
 
