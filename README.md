@@ -308,7 +308,13 @@ Trabajar con un sistema real, dinámico e imperfecto: APIs, ingestión periódic
 
 > **Los datos que necesitamos no existen exactamente como nos gustaría, así que tenemos que construirlos y decidir cómo interpretarlos.**
 
-## 18. Posicionamiento
+## 18. Ideas para jugar
+
+Sin objetivo analítico — porque sí:
+
+- **Timelapse isométrico de la ciudad**: las 70 estaciones como barras 3D que crecen y decrecen al ritmo de los snapshots (ver la ciudad "respirar" en hora punta). Plan lazy: deck.gl `ColumnLayer` sobre mapa oscuro con pitch ~50°, JSON embebido, slider con interpolación entre frames. Viable con un solo día de datos; la versión buena es *lunes lluvioso vs. lunes seco* lado a lado.
+
+## 19. Posicionamiento
 
 > **Estoy construyendo un sistema para estudiar cómo se comporta la red Dbizi de Donostia: un histórico propio de sus estaciones cruzado con meteorología, calendario, eventos e incidencias para detectar patrones, anomalías y posibles explicaciones.**
 
