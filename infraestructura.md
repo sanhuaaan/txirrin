@@ -103,11 +103,26 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi -- -L 5432:l
 
 Credenciales BD: `/opt/dbizi/.env` (root, 600) y `~/.dbizi.env` (usuario, para cron). No están en el repo.
 
+## Monitorización
+
+Dead man's switch en [healthchecks.io](https://healthchecks.io) (plan gratuito): los scripts pingan **solo si terminan bien**, así que la ausencia de ping es la señal. Cubre de una vez VM apagada, cron roto, Postgres caído y script reventado — incluido el caso en que un monitor dentro de la VM no podría avisar de nada.
+
+| Check | Periodo | Gracia | Salta si |
+|-------|---------|--------|----------|
+| `dbizi-collect` | 2 min | 20 min | el collector lleva ~22 min sin capturar |
+| `dbizi-backup` | 1 día | 2 h | el backup diario no se hizo |
+
+- Las alertas son **one-shot**: un correo al caer y otro al recuperarse, no un goteo. Las notificaciones repetidas hay que activarlas a propósito.
+- La gracia ancha es deliberada: un tick suelto que falle **ya no pierde datos** (el crudo queda en disco y `ingest_raw.sh` lo recupera), así que solo interesa enterarse de las caídas sostenidas.
+- Las URLs de ping son secretas y viven en `~/.dbizi.env` como `HC_COLLECT` / `HC_BACKUP`; el repo solo referencia las variables. Si la variable no está definida, el script funciona igual y no pinga.
+- Probado el 2026-08-21 forzando una caída con `curl "$HC_COLLECT/fail"` — el camino de aviso funciona de punta a punta.
+- Límite del plan gratis: 100 entradas de log por check (con ping cada 2 min, ~3 h de historial visible). No afecta a las alertas.
+
 ## Riesgos asumidos
 
 - **La VM es el único punto de captura**: si muere, se pierden ≤24 h (hasta el último backup).
 - **Free tier**: e2-micro en región US, disco *standard*, una VM. Vigilar el primer email de la alerta por el posible cargo de IPv4 (~3 €/mes); si aparece, reevaluar (Hetzner 4 €/mes, 4 GB).
-- **Sin monitorización activa**: un collector caído solo se ve como hueco en `max(fetched_at)` (que ya distingue collector caído de feed congelado). Pendiente si duele: alerta de envejecimiento.
+- **Monitorización**: dead man's switch en healthchecks.io (ver arriba). No cubre el **feed congelado** de PBSC — `collect.py` termina bien aunque `last_updated` no avance —; para eso sigue estando el chequeo manual de `max(ts)` vs `max(fetched_at)`.
 - **Meteo oficial con ~2 meses de retraso** (verificado): mitigado con Open-Meteo (reanálisis, no pluviómetro). API tiempo real de Euskalmet pendiente: su portal de registro no envía el correo de confirmación (reintentar algún día; si llega la key, añadir puller oficial y degradar Open-Meteo a respaldo).
 
 ## Historial de decisiones (condensado)
