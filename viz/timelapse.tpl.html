@@ -21,7 +21,8 @@ body{
   overflow:hidden;
 }
 #stage{position:fixed; inset:0}
-canvas{display:block; width:100%; height:100%; cursor:crosshair}
+canvas{display:block; width:100%; height:100%; cursor:grab; touch-action:none}
+canvas.drag{cursor:grabbing}
 
 .overlay{position:fixed; pointer-events:none}
 .overlay > *{pointer-events:auto}
@@ -124,6 +125,8 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="lgd-ends"><span>sin bicis</span><span>equilibrada</span><span>sin sitio</span></div>
   <p class="lgd-note">Los dos extremos son fallos: no hay bici que coger, o no
     hay dónde dejarla. <b>El equilibrio es lo silencioso.</b></p>
+  <p class="lgd-note"><b>Arrastra</b> para girar la ciudad · doble clic para
+    volver al norte · espacio reproduce</p>
 </div>
 
 <div class="overlay" id="ctl">
@@ -148,19 +151,35 @@ const DATA = __DATA__;
   // --- proyección isométrica: 30°, el ángulo que hace cuadrar las diagonales ---
   const A = Math.PI / 6, COS = Math.cos(A), SIN = Math.sin(A);
   const M_PER_BIKE = 46, SIDE = 115;           // metros por bici / lado de la columna
-  const iso = (x, y, z) => [(x - y) * COS, (x + y) * SIN - z];
 
-  // --- encuadre: bbox de todo lo dibujable, en espacio ya proyectado ---
-  let bb = null;
-  const grow = (p) => {
-    if (!bb) bb = [p[0], p[1], p[0], p[1]];
-    else { bb[0]=Math.min(bb[0],p[0]); bb[1]=Math.min(bb[1],p[1]);
-           bb[2]=Math.max(bb[2],p[0]); bb[3]=Math.max(bb[3],p[1]); }
+  // Centroide de las estaciones: es el eje del giro, así la ciudad rota sobre
+  // sí misma en vez de describir una órbita alrededor de un origen arbitrario.
+  const cx = S.reduce((a, s) => a + s.x, 0) / S.length;
+  const cy = S.reduce((a, s) => a + s.y, 0) / S.length;
+  let rot = 0, rotC = 1, rotS = 0;
+  const setRot = (r) => { rot = r; rotC = Math.cos(r); rotS = Math.sin(r); };
+
+  // El eje norte-sur va invertido a propósito: en pantalla la y crece hacia abajo,
+  // así que sin este signo el mapa sale con el norte abajo. Con él, el norte queda
+  // arriba a la derecha y el este abajo a la derecha, como una isométrica mirando
+  // la ciudad desde el sur.
+  const iso = (x, y, z) => {
+    const dx = x - cx, dy = cy - y;
+    const rx = dx * rotC - dy * rotS, ry = dx * rotS + dy * rotC;
+    return [(rx - ry) * COS, (rx + ry) * SIN - z];
   };
+  const depth = (x, y) => (x - cx) * (rotC + rotS) - (y - cy) * (rotC - rotS);
+
+  // --- encuadre INVARIANTE al giro ---
+  // Ajustar al bbox real de cada ángulo haría que la ciudad creciese y menguase
+  // al arrastrar. Se ajusta al círculo que la contiene: como la isométrica suma
+  // los dos ejes, sale solo un ~5% más holgado que el ajuste ceñido, y a cambio
+  // la escala no se mueve ni un píxel mientras giras.
   const maxCap = Math.max(...S.map(s => s.c));
-  // Solo las estaciones fijan el encuadre: incluir los barrios metía kilómetros
-  // de municipio sin una sola estación y dejaba la ciudad diminuta.
-  for (const s of S) { grow(iso(s.x, s.y, 0)); grow(iso(s.x, s.y, maxCap * M_PER_BIKE)); }
+  const maxH = maxCap * M_PER_BIKE;
+  const R = Math.max(...S.map(s => Math.hypot(s.x - cx, s.y - cy)));
+  const D = R * Math.SQRT2;
+  const bb = [-D * COS, -D * SIN - maxH, D * COS, D * SIN];
 
   let W = 0, H = 0, k = 1, ox = 0, oy = 0;
   function resize() {
@@ -211,8 +230,11 @@ const DATA = __DATA__;
     return F[i];
   }
 
-  // orden del pintor: primero lo lejano (menor x+y), para que lo cercano tape
-  const order = S.map((_, i) => i).sort((a, b) => (S[a].x + S[a].y) - (S[b].x + S[b].y));
+  // Orden del pintor: primero lo lejano, para que lo cercano tape. La profundidad
+  // cambia con el giro, así que se reordena en cada frame (70 elementos, gratis).
+  const idxs = S.map((_, i) => i);
+  const painter = () => idxs.slice().sort((a, b) =>
+    depth(S[a].x, S[a].y) - depth(S[b].x, S[b].y));
 
   function draw() {
     if (!bb) return;
@@ -232,7 +254,7 @@ const DATA = __DATA__;
 
     const half = SIDE / 2;
     let tot = 0, emp = 0, ful = 0;
-    for (const i of order) {
+    for (const i of painter()) {
       const s = S[i], v = bikes[i], cap = s.c || 1;
       const nb = Math.round(v);
       tot += nb; if (nb <= 0) emp++; if (nb >= cap) ful++;
@@ -242,6 +264,7 @@ const DATA = __DATA__;
       else emptyMark(s, half);
     }
 
+    compass();
     el.time.textContent = fTime.format(new Date(fr.t + "Z"));
     el.day.textContent = fDay.format(new Date(fr.t + "Z"));
     el.tot.textContent = tot;
@@ -251,6 +274,22 @@ const DATA = __DATA__;
     el.scrub.value = String(Math.round(pct));
     el.scrub.style.setProperty("--pct", pct.toFixed(1) + "%");
     if (hover >= 0) placeTip();
+  }
+
+  function compass() {
+    if (W < 720) return;
+    const px = W - 74, py = H - 150, r = 21;
+    // dirección del norte en pantalla: el vector mundo (0,1) pasado por giro+isométrica
+    const nx = (rotS + rotC) * COS, ny = (rotS - rotC) * SIN;
+    const m = Math.hypot(nx, ny) || 1, ux = nx / m, uy = ny / m;
+    ctx.strokeStyle = "rgba(93,107,120,.5)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, 6.284); ctx.stroke();
+    ctx.strokeStyle = "#93a2b0"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(px - ux * r * .45, py - uy * r * .45);
+    ctx.lineTo(px + ux * r * .8, py + uy * r * .8); ctx.stroke();
+    ctx.fillStyle = "#e6edf3"; ctx.font = '600 10px "IBM Plex Sans", sans-serif';
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("N", px + ux * (r + 9), py + uy * (r + 9));
   }
 
   function quad(a, b, c, d, fill) {
@@ -298,13 +337,36 @@ const DATA = __DATA__;
     el.tip.style.top = (my - 14) + "px";
     el.tip.style.opacity = "1";
   }
+  let drag = null;                              // {x, rot} mientras se arrastra
+  const RAD_PER_PX = 0.006;                     // ~340 px para un cuarto de vuelta
+
+  cvs.addEventListener("pointerdown", (e) => {
+    drag = { x: e.clientX, rot };
+    cvs.setPointerCapture(e.pointerId);
+    cvs.classList.add("drag");
+    hover = -1; el.tip.style.opacity = "0";
+  });
+  const endDrag = (e) => {
+    if (!drag) return;
+    drag = null; cvs.classList.remove("drag");
+    if (e && e.pointerId !== undefined && cvs.hasPointerCapture(e.pointerId))
+      cvs.releasePointerCapture(e.pointerId);
+  };
+  cvs.addEventListener("pointerup", endDrag);
+  cvs.addEventListener("pointercancel", endDrag);
+
   cvs.addEventListener("pointermove", (e) => {
     mx = e.clientX; my = e.clientY;
+    if (drag) { setRot(drag.rot + (mx - drag.x) * RAD_PER_PX); draw(); return; }
     const h = hit(mx, my);
     if (h !== hover) { hover = h; if (h < 0) el.tip.style.opacity = "0"; }
     if (hover >= 0) placeTip();
   });
-  cvs.addEventListener("pointerleave", () => { hover = -1; el.tip.style.opacity = "0"; });
+  cvs.addEventListener("pointerleave", () => {
+    if (drag) return;
+    hover = -1; el.tip.style.opacity = "0";
+  });
+  cvs.addEventListener("dblclick", () => { setRot(0); draw(); });
 
   // --- reproducción ---
   function setPlaying(p) {
@@ -330,6 +392,8 @@ const DATA = __DATA__;
     if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
     else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+1); draw(); }
     else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-1); draw(); }
+    else if (e.key === "[") { setRot(rot - Math.PI / 12); draw(); }
+    else if (e.key === "]") { setRot(rot + Math.PI / 12); draw(); }
   });
   addEventListener("resize", resize);
 
