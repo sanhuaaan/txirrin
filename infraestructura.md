@@ -115,7 +115,7 @@ Dead man's switch en [healthchecks.io](https://healthchecks.io) (plan gratuito):
 - Las alertas son **one-shot**: un correo al caer y otro al recuperarse, no un goteo. Las notificaciones repetidas hay que activarlas a propósito.
 - La gracia ancha es deliberada: un tick suelto que falle **ya no pierde datos** (el crudo queda en disco y `ingest_raw.sh` lo recupera), así que solo interesa enterarse de las caídas sostenidas.
 - Las URLs de ping son secretas y viven en `~/.dbizi.env` como `HC_COLLECT` / `HC_BACKUP`; el repo solo referencia las variables. Si la variable no está definida, el script funciona igual y no pinga.
-- Probado el 2026-08-21 forzando una caída con `curl "$HC_COLLECT/fail"` — el camino de aviso funciona de punta a punta.
+- Probado el 2026-08-21 forzando una caída con `curl "$HC_COLLECT/fail"`: llegaron **los dos correos**, el de caída y el de recuperación. Lo segundo no está documentado por healthchecks — se comprobó a mano.
 - Límite del plan gratis: 100 entradas de log por check (con ping cada 2 min, ~3 h de historial visible). No afecta a las alertas.
 
 ## Riesgos asumidos
