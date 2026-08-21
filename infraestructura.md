@@ -30,13 +30,13 @@ Estado a 2026-08-21. Coste total: **0 €/mes**.
 - **`dbizi-vm`**: e2-micro free tier (2 vCPU compartidas, 1 GB RAM, 30 GB pd-standard), Ubuntu 24.04, zona `us-west1-a`, scope `storage-rw`. IP efímera — no depender de ella.
 - Proyecto GCP **`cosas-con-datos-en-dbizi`** (cuenta personal). Alerta de presupuesto: 1 € (email al 50%/100%).
 - En local, todo con la configuración gcloud **`dbizi`** (la `default` del trabajo no se toca).
-- ⚠️ Con 1 GB de RAM, las cargas masivas largas (multi-año) saturan la máquina hasta tumbar el SSH — cargar de año en año.
+- ⚠️ Con 1 GB de RAM, las cargas masivas largas (multi-año) saturan la máquina hasta tumbar el SSH — cargar de año en año. El 2026-08-21, durante la carga inicial multi-año de Euskalmet, el collector murió a mitad de escritura y dejó un `~/raw/20260821/080401_status.json.gz` de **0 bytes** (gzip no vacía su búfer hasta `close()`). Desde entonces la escritura del crudo es atómica: un proceso matado deja un `.tmp`, nunca un `.json.gz` que parezca un snapshot.
 
 ## Crons (crontab del usuario en la VM)
 
 | Cron | Cuándo (UTC) | Qué hace | Log |
 |------|--------------|----------|-----|
-| `collect.sh` | cada 2 min | GBFS → `dbizi_measurement` + crudo gzip a `~/raw/` (`station_information` 1×/día) | `~/collect.log` |
+| `collect.sh` | cada 2 min | GBFS → `dbizi_measurement` + crudo gzip a `~/raw/` (`station_information` 1×/día). Escritura atómica vía `.tmp` + `rename`, y valida el feed antes de archivar | `~/collect.log` |
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → GCS `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
 | `weather.sh` | 04:45 día 2 de cada mes | Re-carga idempotente de Euskalmet (XML oficiales): **año anterior + actual** (con suelo en 2026) — los meses finales de un año se publican ya entrado el siguiente; los meses repetidos insertan 0 y los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
