@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Color de cada celda del relieve a partir de la ortofoto real (PNOA, IGN).
+"""Máscara de mar para el timelapse, a partir de la ortofoto real (PNOA, IGN).
 
-Lee la rejilla de viz/donostia-dem.json, pide al WMS del IGN la ortofoto del
-mismo recuadro a PX_POR_CELDA píxeles por celda, promedia cada bloque y
-cuantiza el resultado a una paleta corta (median cut). Guarda en el propio
-JSON `pal` (la paleta) y `c` (índice por nodo). Así cada celda es un píxel:
-pixel art de la ciudad a 50 m, no una foto pegada.
+El DEM solo no basta: la vega del Urumea y media Amara están a cota 0, igual
+que el mar. Aquí se pide al WMS del IGN la ortofoto del recuadro de la
+rejilla, se reduce a un píxel por nodo y se marca como mar lo que está a cota
+0, tiene pinta de agua Y está conectado al borde norte por inundación: así
+entran la bahía, Santa Clara y la ría, y no los tejados del centro. Guarda
+`sea` (0/1 por nodo) en viz/donostia-dem.json. Se ejecuta una vez; necesita
+Pillow solo aquí.
 
-El mar es el índice 0: celdas a cota 0 cuya ortofoto es azul o blanca (el
-PNOA no cubre mar abierto y devuelve blanco). Se ejecuta una vez; necesita
-Pillow solo aquí, la página no.
+(Se probó también colorear cada celda desde la ortofoto, como pixel art. Se
+descartó: la textura bajo las columnas las hacía más difíciles de leer.)
 """
 import io, json, math, os, sys, urllib.request
 from PIL import Image
@@ -19,7 +20,6 @@ GEO = os.path.join(ROOT, "viz", "donostia-barrios.json")
 DEM = os.path.join(ROOT, "viz", "donostia-dem.json")
 M_DEG = 111320.0
 PX_POR_CELDA = 4
-COLORES = 16
 WMS = ("https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap"
        "&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:4326&BBOX={s},{w},{n},{e}"
        "&WIDTH={W}&HEIGHT={H}&FORMAT=image/png")
@@ -62,38 +62,11 @@ def main():
             if 0 <= a < nx and 0 <= b < ny and not sea[b * nx + a] \
                and z[b * nx + a] <= 0 and agua(cols[b * nx + a]):
                 stack.append((a, b))
-    cols = [None if sea[k] else cols[k] for k in range(nx * ny)]
-    # Clasificación, no cuantización: una paleta extraída de la ortofoto da una
-    # foto pegada (gris-verde con ruido). Aquí cada celda cae en una clase por
-    # su color real y la clase tiene un color ELEGIDO. Estructura real, pixel art.
-    CLASES = [  # (nombre, color estilizado)
-        ("mar",     [16, 36, 55]),
-        ("bosque",  [34, 68, 50]),
-        ("prado",   [88, 132, 70]),
-        ("casco",   [138, 132, 128]),
-        ("claro",   [184, 178, 164]),
-        ("arena",   [214, 190, 122]),
-    ]
-    # Umbrales calibrados sobre el PNOA de Donostia (velo azulado costero: lo
-    # que separa es la luminancia y el verde relativo): Gros/Amara lum~160,
-    # Zurriola 210, bosque de Igeldo 72, Anoeta 104.
-    def clase(c):
-        r_, g_, b_ = c
-        l = 0.299 * r_ + 0.587 * g_ + 0.114 * b_
-        verde = g_ - r_
-        if l > 190 and r_ - b_ >= 4: return 5                         # arena
-        if l > 185:      return 4                                     # vial, solar, tejado claro
-        if verde >= 12:  return 2 if l >= 100 else 1                  # prado / bosque
-        if l >= 120:     return 3                                     # casco
-        return 1                                                      # oscuro: bosque
-    idx = [0 if c is None else clase(c) for c in cols]
-    d["pal"] = [c[1] for c in CLASES]
-    from collections import Counter
-    print({CLASES[k][0]: n for k, n in sorted(Counter(idx).items())}, file=sys.stderr)
-    d["c"] = idx
-    d["note"] += "; pal/c: color por nodo desde la ortofoto PNOA (IGN), 0 = mar (scripts/fetch_ortho.py)"
+    d["sea"] = [1 if v else 0 for v in sea]
+    for k in ("pal", "c"): d.pop(k, None)
+    d["note"] = d["note"].split(";")[0] + "; sea: máscara de mar por inundación desde la ortofoto PNOA (scripts/fetch_ortho.py)"
     json.dump(d, open(DEM, "w"), separators=(",", ":"))
-    print(f"{DEM}: {len(CLASES)} clases, {sum(1 for i in idx if i == 0)} nodos de mar, "
+    print(f"{DEM}: {sum(sea)} nodos de mar, "
           f"{os.path.getsize(DEM)/1024:.0f} KB", file=sys.stderr)
     Image.open(io.BytesIO(png)).save(os.path.join(os.environ.get("CLAUDE_JOB_DIR", "/tmp"), "tmp", "ortho.png"))
 
