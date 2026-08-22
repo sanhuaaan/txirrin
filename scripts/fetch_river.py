@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""El Urumea para el timelapse, desde OpenStreetMap (Overpass).
+"""El Urumea y las playas para el timelapse, desde OpenStreetMap (Overpass).
 
 A 50 m por celda un río de 30-60 m de ancho no cabe en el relieve: se promedia
 con las orillas y desaparece. Así que va como vector: el eje (waterway=river)
 como polilíneas y la lámina de agua de la ría (natural=water) como polígono,
-en metros locales con el mismo origen que todo lo demás. Se guarda en
-viz/donostia-dem.json como `rivers` y `water`. Se ejecuta una vez.
+y las playas (natural=beach) como polígonos, en metros locales con el mismo
+origen que todo lo demás. Se guarda en viz/donostia-dem.json como `rivers`,
+`water` y `beaches`. Se ejecuta una vez.
 """
 import json, math, os, sys, urllib.parse, urllib.request
 
@@ -15,7 +16,8 @@ DEM = os.path.join(ROOT, "viz", "donostia-dem.json")
 M_DEG = 111320.0
 Q = ('[out:json][timeout:50];('
      'way["waterway"="river"]["name"~"Urumea"]({b});'
-     'way["natural"="water"]["water"="river"]["name"~"Urumea"]({b}););out geom;')
+     'way["natural"="water"]["water"="river"]["name"~"Urumea"]({b});'
+     'way["natural"="beach"]({b}););out geom;')
 
 
 def dp(pts, tol):                       # Douglas-Peucker
@@ -38,7 +40,10 @@ def main():
     with urllib.request.urlopen(req, timeout=90) as r: els = json.load(r)["elements"]
     loc = lambda g: (round((g["lon"] - lon0) * kx), round((g["lat"] - lat0) * M_DEG))
     inside = lambda p: x0 <= p[0] <= x1 and y0 <= p[1] <= y1
-    rivers, water = [], []
+    rivers, water, beaches = [], [], []
+    def ring(pts, tol):                 # anillo cerrado: DP necesita dos mitades
+        r = [p for p in pts if inside(p)]; m = len(r) // 2
+        return dp(r[:m + 1], tol)[:-1] + dp(r[m:], tol) if len(r) > 3 else None
     for w in els:
         pts = [loc(g) for g in w["geometry"]]
         if w["tags"].get("waterway") == "river":
@@ -48,14 +53,17 @@ def main():
                 elif len(run) > 1: rivers.append(dp(run, 12)); run = []
                 else: run = []
             if len(run) > 1: rivers.append(dp(run, 12))
-        else:                             # anillo cerrado: DP necesita dos mitades
-            ring = [p for p in pts if inside(p)]; m = len(ring) // 2
-            water.append(dp(ring[:m + 1], 10)[:-1] + dp(ring[m:], 10))
-    d["rivers"], d["water"] = rivers, water
-    d["note"] += "; rivers/water: Urumea desde OSM (scripts/fetch_river.py)"
+        elif w["tags"].get("natural") == "beach":
+            r = ring(pts, 8)
+            if r and len(r) >= 4: beaches.append(r)
+        else:
+            water.append(ring(pts, 10))
+    d["rivers"], d["water"], d["beaches"] = rivers, water, beaches
+    d["note"] = d["note"].split("; rivers")[0] + "; rivers/water/beaches: Urumea y playas desde OSM (scripts/fetch_river.py)"
     json.dump(d, open(DEM, "w"), separators=(",", ":"))
     print(f"{len(rivers)} tramos ({sum(len(r) for r in rivers)} pts), {len(water)} láminas "
-          f"({sum(len(w) for w in water)} pts)", file=sys.stderr)
+          f"({sum(len(w) for w in water)} pts), {len(beaches)} playas "
+          f"({sum(len(b) for b in beaches)} pts)", file=sys.stderr)
 
 
 if __name__ == "__main__":
