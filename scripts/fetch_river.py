@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""El Urumea para el timelapse, desde OpenStreetMap (Overpass).
+"""El Urumea y la isla de Santa Clara para el timelapse, desde OpenStreetMap.
 
 A 50 m por celda un río de 30-60 m de ancho no cabe en el relieve: se promedia
 con las orillas y desaparece. Así que va como vector: el eje (waterway=river)
 como polilíneas y la lámina de agua de la ría (natural=water) como polígono,
 en metros locales con el mismo origen que todo lo demás. Se guarda en
-viz/donostia-dem.json como `rivers` y `water`. Se ejecuta una vez. (Las
+viz/donostia-dem.json como `rivers`, `water` e `islands` (Santa Clara: en el
+DEM a 50 m sale a cota 0 y la inundación del mar se la traga; como polígono
+se pinta encima). Se ejecuta una vez. (Las
 playas se probaron y se quitaron: no aportaban y ensuciaban.)
 """
 import json, math, os, sys, urllib.parse, urllib.request
@@ -16,7 +18,8 @@ DEM = os.path.join(ROOT, "viz", "donostia-dem.json")
 M_DEG = 111320.0
 Q = ('[out:json][timeout:50];('
      'way["waterway"="river"]["name"~"Urumea"]({b});'
-     'way["natural"="water"]["water"="river"]["name"~"Urumea"]({b}););out geom;')
+     'way["natural"="water"]["water"="river"]["name"~"Urumea"]({b});'
+     'way["place"~"^(island|islet)$"]({b}););out geom;')
 
 
 def dp(pts, tol):                       # Douglas-Peucker
@@ -39,7 +42,7 @@ def main():
     with urllib.request.urlopen(req, timeout=90) as r: els = json.load(r)["elements"]
     loc = lambda g: (round((g["lon"] - lon0) * kx), round((g["lat"] - lat0) * M_DEG))
     inside = lambda p: x0 <= p[0] <= x1 and y0 <= p[1] <= y1
-    rivers, water = [], []
+    rivers, water, islands = [], [], []
     def ring(pts, tol):                 # anillo cerrado: DP necesita dos mitades
         r = [p for p in pts if inside(p)]; m = len(r) // 2
         return dp(r[:m + 1], tol)[:-1] + dp(r[m:], tol) if len(r) > 3 else None
@@ -52,14 +55,17 @@ def main():
                 elif len(run) > 1: rivers.append(dp(run, 12)); run = []
                 else: run = []
             if len(run) > 1: rivers.append(dp(run, 12))
+        elif w["tags"].get("place") in ("island", "islet"):
+            r = ring(pts, 6)
+            if r: islands.append(r)
         else:
             water.append(ring(pts, 10))
     d.pop("beaches", None)
-    d["rivers"], d["water"] = rivers, water
-    d["note"] = d["note"].split("; rivers")[0] + "; rivers/water: Urumea desde OSM (scripts/fetch_river.py)"
+    d["rivers"], d["water"], d["islands"] = rivers, water, islands
+    d["note"] = d["note"].split("; rivers")[0] + "; rivers/water/islands: Urumea y Santa Clara desde OSM (scripts/fetch_river.py)"
     json.dump(d, open(DEM, "w"), separators=(",", ":"))
     print(f"{len(rivers)} tramos ({sum(len(r) for r in rivers)} pts), {len(water)} láminas "
-          f"({sum(len(w) for w in water)} pts)", file=sys.stderr)
+          f"({sum(len(w) for w in water)} pts), {len(islands)} islas", file=sys.stderr)
 
 
 if __name__ == "__main__":

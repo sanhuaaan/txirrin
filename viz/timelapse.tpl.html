@@ -596,7 +596,12 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       }
       g.closePath();
     }
-    g.fill("evenodd"); g.stroke();              // evenodd: Santa Clara es un agujero
+    g.fill("evenodd"); g.stroke();
+    // Santa Clara: en el DEM a 50 m queda a cota 0 y el mar se la traga;
+    // va como polígono de OSM pintado encima, con el tono de tierra baja
+    for (const isla of DEM.islands || []) {
+      drape(isla, true); g.fillStyle = shade(hyps(30), 0.95); g.fill(); g.strokeStyle = FILO; g.lineWidth = 1; g.stroke();
+    }
     // el Urumea, vectorial: a 50 m por celda un río no cabe en el relieve.
     // Mismo color que el mar, con el mismo filo para que no se pierda.
     g.lineCap = "round";
