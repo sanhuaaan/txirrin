@@ -58,9 +58,12 @@ h1 em{font-style:italic; font-weight:500; color:var(--ink-2)}
 .stat .k{font-size:11px; color:var(--ink-2); letter-spacing:.03em}
 .stat .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:16px}
 .stat .v small{font-size:11px; color:var(--ink-3)}
-button#ev{width:100%; min-width:0; background:none; border:none; border-top:1px solid var(--line);
-  border-radius:0; margin-top:6px; padding:9px 0 2px; cursor:pointer; font:inherit; color:inherit}
-button#ev:hover .k{color:var(--ink)}
+button#ev{width:100%; min-width:0; margin-top:10px; padding:8px 10px; display:flex; align-items:center; gap:8px;
+  font-size:12px; color:var(--ink-2); background:#18222c; border:1px solid var(--ink-3); border-radius:3px}
+button#ev:hover{color:var(--ink); border-color:var(--ink-2); background:#1d2935}
+button#ev svg{flex:none; color:var(--ink-3)}
+button#ev:hover svg{color:var(--ink)}
+button#ev .n{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:14px; color:var(--ink)}
 #ev-dlg{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:4px;
   padding:18px 22px; width:min(520px, calc(100vw - 32px)); max-height:80vh; font-size:13px}
 #ev-dlg::backdrop{background:rgba(6,9,12,.6); backdrop-filter:blur(3px)}
@@ -148,7 +151,10 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
-  <button class="stat" id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg"><span class="k">Agenda del día</span><span class="v" id="ev-n">—<small> ›</small></span></button>
+  <button id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5.5 1.5v3M10.5 1.5v3"/></svg>
+    <span>Ver agenda del día</span><span class="n" id="ev-n">—</span>
+  </button>
 </div>
 
 <dialog id="ev-dlg" aria-labelledby="ev-title">
@@ -393,7 +399,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     el.day.innerHTML = fDay.format(d) + ' <span class="kind' + (hol ? " fest" : "") + '">· ' + kind + "</span>";
     const ev = (CTX.events || {})[dia];
     if (ev && ev.n) {
-      el.ev.hidden = false; el.evn.innerHTML = ev.n + "<small> ›</small>";
+      el.ev.hidden = false; el.evn.textContent = ev.n;
       document.getElementById("ev-title").textContent = "Agenda · " + fDay.format(d);
       el.evc.textContent = Object.entries(ev.counts).map(([k, v]) => v + " " + k.toLowerCase()).join(" · ");
       const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
