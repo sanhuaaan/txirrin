@@ -17,7 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GEO = os.path.join(ROOT, "viz", "donostia-barrios.json")
 OUT = os.path.join(ROOT, "viz", "donostia-dem.json")
 M_DEG = 111320.0
-STEP = 100            # m
+STEP = 50             # m
 MARGIN = 600          # m alrededor del bbox de barrios: que el mar y los montes
                       # no se corten a ras de límite municipal
 API = "https://api.opentopodata.org/v1/eudem25m?locations={locs}"

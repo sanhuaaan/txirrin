@@ -339,21 +339,22 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   const NC = (TNX - 1) * (TNY - 1);
   const cDepth = new Float32Array(NC), cBox = new Float32Array(NC * 4);
   const cOrder = new Int32Array(NC);
-  let tKey = "";
-  // tinta hipsométrica por bandas de 20 m: lo que hace que se lea como maqueta
-  const SEA = hex("#102437");
-  const HYPS = [[0, hex("#1b2a2b")], [90, hex("#2c3b33")], [200, hex("#514c3e")], [320, hex("#7a705e")]];
-  function hyps(h) {
-    h = Math.floor(h / 20) * 20;
-    let a = HYPS[0], b = HYPS[HYPS.length - 1];
-    for (let i = 1; i < HYPS.length; i++) if (h <= HYPS[i][0]) { a = HYPS[i - 1]; b = HYPS[i]; break; }
-    return lerp(a[1], b[1], Math.min(1, (h - a[0]) / (b[0] - a[0])));
-  }
+  let tKey = "", coarse = false;
+  // Mientras se arrastra, celdas de 2x2: cuatro veces menos trabajo y el giro
+  // va fluido; al soltar se repinta fino. La oclusión se salta en grueso.
+  // Cada celda es un píxel de la ortofoto real (PNOA) cuantizada a una paleta
+  // corta: pixel art de la ciudad, con el sombreado del relieve encima. El
+  // índice 0 es mar. DIM atenúa la paleta para que las columnas manden.
+  const SEA = hex("#102437"), DIM = 0.78;
+  const PAL = DEM.pal.map(c => c.map(v => v * DIM));
+  const CI = DEM.c;
   const px_ = (p) => p[0] * k * zoom + ox + panX, py_ = (p) => p[1] * k * zoom + oy + panY;
   function renderTerrain() {
-    const key = [rot, tilt, zoom, panX, panY, W, H].join("|");
+    coarse = !!(drag || pinch);
+    const key = [rot, tilt, zoom, panX, panY, W, H, coarse].join("|");
     if (key === tKey) return;
     tKey = key;
+    const ST = coarse ? 2 : 1, STP = TSTEP * ST;
     tcv.width = cvs.width; tcv.height = cvs.height;
     const dpr = cvs.width / W;
     tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -376,28 +377,35 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     // luz fija respecto al observador (arriba-izquierda), como en las columnas
     const LX = -0.6, LY = 0.2, LZ = 0.75, LN = Math.hypot(LX, LY, LZ);
     // orden del pintor: de lejos a cerca, según el giro
-    for (let c = 0; c < NC; c++) {
-      const i = c % (TNX - 1), j = (c / (TNX - 1)) | 0;
-      cDepth[c] = depth(TX0 + (i + .5) * TSTEP, TY0 + (j + .5) * TSTEP);
+    const NXc = Math.ceil((TNX - 1) / ST), NYc = Math.ceil((TNY - 1) / ST), NCc = NXc * NYc;
+    for (let c = 0; c < NCc; c++) {
+      const i = (c % NXc) * ST, j = ((c / NXc) | 0) * ST;
+      cDepth[c] = depth(TX0 + (i + .5 * ST) * TSTEP, TY0 + (j + .5 * ST) * TSTEP);
       cOrder[c] = c;
     }
-    cOrder.sort((a, b) => cDepth[a] - cDepth[b]);
-    for (let n = 0; n < NC; n++) {
-      const c = cOrder[n], i = c % (TNX - 1), j = (c / (TNX - 1)) | 0;
-      const x0 = TX0 + i * TSTEP, y0 = TY0 + j * TSTEP, x1 = x0 + TSTEP, y1 = y0 + TSTEP;
-      const z00 = tz(i, j), z10 = tz(i + 1, j), z01 = tz(i, j + 1), z11 = tz(i + 1, j + 1);
-      const zm = (z00 + z10 + z01 + z11) / 4;
+    const ord = cOrder.subarray(0, NCc); ord.sort((a, b) => cDepth[a] - cDepth[b]);
+    for (let n = 0; n < NCc; n++) {
+      const c = ord[n], i = (c % NXc) * ST, j = ((c / NXc) | 0) * ST;
+      const i1 = Math.min(TNX - 1, i + ST), j1 = Math.min(TNY - 1, j + ST);
+      const x0 = TX0 + i * TSTEP, y0 = TY0 + j * TSTEP, x1 = TX0 + i1 * TSTEP, y1 = TY0 + j1 * TSTEP;
+      const z00 = tz(i, j), z10 = tz(i1, j), z01 = tz(i, j1), z11 = tz(i1, j1);
+      const ci = CI[j * TNX + i];
       let fill;
-      if (zm <= 0) fill = `rgb(${SEA[0]},${SEA[1]},${SEA[2]})`;
+      if (ci === 0) {
+        // orilla: el mar pegado a tierra, un punto más claro; dibuja la costa sola
+        const orilla = (i > 0 && CI[j * TNX + i - 1]) || (i < TNX - 2 && CI[j * TNX + i + 2]) ||
+                       (j > 0 && CI[(j - 1) * TNX + i]) || (j < TNY - 2 && CI[(j + 2) * TNX + i]);
+        fill = orilla ? `rgb(${SEA[0]+14},${SEA[1]+22},${SEA[2]+26})` : `rgb(${SEA[0]},${SEA[1]},${SEA[2]})`;
+      }
       else {
         // normal de la celda llevada al sistema de la vista: así la sombra
         // depende de hacia dónde mira la ladera respecto a quien mira
-        const gx = (z10 + z11 - z00 - z01) / (2 * TSTEP), gy = (z01 + z11 - z00 - z10) / (2 * TSTEP);
+        const gx = (z10 + z11 - z00 - z01) / (2 * STP), gy = (z01 + z11 - z00 - z10) / (2 * STP);
         const nx = -gx, ny = gy;                // dy = cy - y invierte el eje norte
         const rx = nx * rotC - ny * rotS, ry = nx * rotS + ny * rotC;
         const nn = Math.hypot(rx, ry, 1);
         const d = (rx * LX + ry * LY + LZ) / (nn * LN);
-        fill = shade(hyps(zm / EXAG), 0.62 + 0.55 * Math.max(0, d));
+        fill = shade(PAL[ci], 0.62 + 0.55 * Math.max(0, d));
       }
       const a = iso(x0, y0, z00), b = iso(x1, y0, z10), cc = iso(x1, y1, z11), dd = iso(x0, y1, z01);
       const ax = px_(a), ay = py_(a), bx = px_(b), by = py_(b), cx2 = px_(cc), cy2 = py_(cc), dx = px_(dd), dy = py_(dd);
@@ -426,6 +434,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   // tiene detrás. Se excluye la celda en la que se apoya la columna (umbral
   // de un paso), que pintada encima borraría el pie de las caras delanteras.
   function occlude(s, h, half) {
+    if (coarse) return;
     const cd = depth(s.x, s.y) + TSTEP;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const [ex, ey] of [[-half, -half], [half, -half], [half, half], [-half, half]]) {
@@ -597,6 +606,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     if (cvs.hasPointerCapture(e.pointerId)) cvs.releasePointerCapture(e.pointerId);
     if (pointers.size < 2) pinch = null;
     if (pointers.size === 0) { drag = null; cvs.classList.remove("drag", "pan"); }
+    if (!drag && !pinch) draw();              // al soltar, el terreno fino
   };
   cvs.addEventListener("pointerup", endPointer);
   cvs.addEventListener("pointercancel", endPointer);
