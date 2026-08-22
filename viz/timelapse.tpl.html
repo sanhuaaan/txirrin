@@ -58,14 +58,22 @@ h1 em{font-style:italic; font-weight:500; color:var(--ink-2)}
 .stat .k{font-size:11px; color:var(--ink-2); letter-spacing:.03em}
 .stat .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:16px}
 .stat .v small{font-size:11px; color:var(--ink-3)}
-#ev{margin-top:8px; padding-top:8px; border-top:1px solid var(--line); max-width:230px}
-.ev-h{font-size:11px; color:var(--ink-2); letter-spacing:.03em}
-.ev-h span{font-family:"IBM Plex Mono",monospace; color:var(--ink)}
-#ev-counts{font-size:11px; color:var(--ink-3); margin-top:3px; line-height:1.45}
-#ev-list{list-style:none; margin:6px 0 0; padding:0; font-size:11px; line-height:1.4; color:var(--ink-2)}
-#ev-list li{margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-#ev-list b{font-weight:500; color:var(--ink)}
-#ev-list small{color:var(--ink-3)}
+button#ev{width:100%; min-width:0; background:none; border:none; border-top:1px solid var(--line);
+  border-radius:0; margin-top:6px; padding:9px 0 2px; cursor:pointer; font:inherit; color:inherit}
+button#ev:hover .k{color:var(--ink)}
+#ev-dlg{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:4px;
+  padding:18px 22px; width:min(520px, calc(100vw - 32px)); max-height:80vh; font-size:13px}
+#ev-dlg::backdrop{background:rgba(6,9,12,.6); backdrop-filter:blur(3px)}
+.dlg-head{display:flex; justify-content:space-between; align-items:baseline; gap:16px}
+.dlg-head h2{margin:0; font-family:"Bodoni Moda",serif; font-weight:500; font-size:22px}
+#ev-close{min-width:0; padding:4px 9px; font-size:13px}
+#ev-counts{font-size:12px; color:var(--ink-3); margin-top:6px}
+#ev-list{list-style:none; margin:12px 0 0; padding:0; line-height:1.45}
+#ev-list li{padding:7px 0; border-top:1px solid var(--line)}
+#ev-list .t{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3)}
+#ev-list b{font-weight:500; display:block}
+#ev-list small{color:var(--ink-2)}
+.dlg-note{margin:14px 0 0; font-size:11px; color:var(--ink-3); line-height:1.5}
 .dot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px}
 .pulse{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px;
        background:#5fd08a; animation:blip 2.4s ease-in-out infinite}
@@ -140,12 +148,15 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
-  <div id="ev" hidden>
-    <div class="ev-h">Agenda del día <span id="ev-n"></span></div>
-    <div id="ev-counts"></div>
-    <ul id="ev-list"></ul>
-  </div>
+  <button class="stat" id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg"><span class="k">Agenda del día</span><span class="v" id="ev-n">—<small> ›</small></span></button>
 </div>
+
+<dialog id="ev-dlg" aria-labelledby="ev-title">
+  <div class="dlg-head"><h2 id="ev-title">Agenda</h2><button id="ev-close" aria-label="Cerrar">✕</button></div>
+  <div id="ev-counts"></div>
+  <ul id="ev-list"></ul>
+  <p class="dlg-note">Citas de un día (o dos) en Donostia, de la agenda de Kulturklik. Las exposiciones y ciclos de semanas no aparecen: no mueven bicis un día concreto.</p>
+</dialog>
 
 <div class="overlay" id="legend">
   <div class="lgd-title">Ocupación de la estación</div>
@@ -382,9 +393,12 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     el.day.innerHTML = fDay.format(d) + ' <span class="kind' + (hol ? " fest" : "") + '">· ' + kind + "</span>";
     const ev = (CTX.events || {})[dia];
     if (ev && ev.n) {
-      el.ev.hidden = false; el.evn.textContent = ev.n;
+      el.ev.hidden = false; el.evn.innerHTML = ev.n + "<small> ›</small>";
+      document.getElementById("ev-title").textContent = "Agenda · " + fDay.format(d);
       el.evc.textContent = Object.entries(ev.counts).map(([k, v]) => v + " " + k.toLowerCase()).join(" · ");
-      el.evl.innerHTML = ev.top.map(e => "<li><b>" + e.name + "</b> <small>· " + e.place + "</small></li>").join("");
+      const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      el.evl.innerHTML = (ev.items || []).map(e => "<li><span class=\"t\">" + esc(e.type) + "</span><b>" + esc(e.name) + "</b>" +
+        (e.place ? "<small>" + esc(e.place) + "</small>" : "") + "</li>").join("");
     } else el.ev.hidden = true;
   }
 
@@ -838,6 +852,12 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
 
   cvs.addEventListener("dblclick", resetView);
 
+  // agenda en un modal: el panel solo lleva la cuenta
+  const dlg = document.getElementById("ev-dlg");
+  el.ev.addEventListener("click", () => { setPlaying(false); dlg.showModal(); });
+  document.getElementById("ev-close").addEventListener("click", () => dlg.close());
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+
   // --- reproducción ---
   function setPlaying(p) {
     playing = p;
@@ -859,6 +879,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     draw();
   });
   addEventListener("keydown", (e) => {
+    if (dlg.open) return;                       // con el modal abierto, los atajos no
     if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
     else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+1); draw(); }
     else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-1); draw(); }

@@ -109,10 +109,10 @@ def load_context(weather, holidays, events, frames):
                                          - datetime.fromisoformat(e["startDate"][:10])).days <= 2]
             counts = {}
             for e in cortos: counts[e.get("typeEs") or "Otro"] = counts.get(e.get("typeEs") or "Otro", 0) + 1
-            top = [{"type": e.get("typeEs") or "", "name": e["nameEs"].strip('"')[:70],
-                    "place": (e.get("establishmentEs") or "")[:40]}
-                   for e in cortos if e.get("establishmentEs")][:3]
-            out[d] = {"n": len(cortos), "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1])[:4]), "top": top}
+            items = sorted(({"type": e.get("typeEs") or "", "name": e["nameEs"].strip('"')[:90],
+                             "place": (e.get("establishmentEs") or "")[:50]} for e in cortos),
+                           key=lambda e: (e["type"], e["name"]))
+            out[d] = {"n": len(cortos), "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1])[:4]), "items": items}
         ctx["events"] = out
     return ctx
 
