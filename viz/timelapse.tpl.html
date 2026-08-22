@@ -492,7 +492,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   // art; la textura bajo las columnas las hacía más difíciles de leer.)
   // Agua en verde azulado apagado, a propósito lejos del azul de las columnas
   // llenas: el agua es fondo y no puede parecer dato.
-  const SEA = hex("#132a33"), RIO = "#3b7c7e";
+  const SEA = hex("#132a33"), SEAC = `rgb(${SEA[0]},${SEA[1]},${SEA[2]})`, FILO = "rgba(92,150,152,.45)";
   const HYPS = [[0, hex("#161f22")], [90, hex("#232e29")], [200, hex("#3e3a31")], [320, hex("#5c554a")]];
   function hyps(h) {
     h = Math.floor(h / 20) * 20;
@@ -586,7 +586,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       }
       if (close) g.closePath();
     };
-    g.fillStyle = `rgb(${SEA[0]},${SEA[1]},${SEA[2]})`; g.strokeStyle = "rgba(92,150,152,.45)";
+    g.fillStyle = SEAC; g.strokeStyle = FILO;
     g.lineWidth = 1; g.lineJoin = "round";
     g.beginPath();
     for (const ring of DEM.seapolys) {
@@ -597,11 +597,15 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       g.closePath();
     }
     g.fill("evenodd"); g.stroke();              // evenodd: Santa Clara es un agujero
-    // el Urumea, vectorial: a 50 m por celda un río no cabe en el relieve
-    g.fillStyle = RIO; g.strokeStyle = RIO; g.lineCap = "round";
-    for (const w of DEM.water) { drape(w, true); g.fill(); }
-    g.lineWidth = Math.max(1.2, 2 * Math.min(2, zoom));
-    for (const r of DEM.rivers) { drape(r, false); g.stroke(); }
+    // el Urumea, vectorial: a 50 m por celda un río no cabe en el relieve.
+    // Mismo color que el mar, con el mismo filo para que no se pierda.
+    g.lineCap = "round";
+    for (const w of DEM.water) { drape(w, true); g.fillStyle = SEAC; g.fill(); g.strokeStyle = FILO; g.lineWidth = 1; g.stroke(); }
+    const lw = Math.max(1.5, 2.2 * Math.min(2, zoom));
+    for (const r of DEM.rivers) {
+      drape(r, false); g.strokeStyle = FILO; g.lineWidth = lw + 1.6; g.stroke();
+      g.strokeStyle = SEAC; g.lineWidth = lw; g.stroke();
+    }
   }
   // Vuelve a poner, desde la caché, las celdas que quedan DELANTE de una
   // columna y se solapan con ella en pantalla: así una colina tapa lo que
