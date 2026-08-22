@@ -82,6 +82,41 @@ def build_frames(path, st, minutes):
     return frames
 
 
+def load_context(weather, holidays, events, frames):
+    """Lo que rodea a la marea: meteo horaria, tipo de día y eventos. Todo es
+    opcional; la página funciona sin nada de esto."""
+    ctx = {}
+    if weather and os.path.exists(weather):
+        w = []
+        for r in csv.reader(open(weather, encoding="utf-8")):
+            if len(r) < 4 or not r[0].strip(): continue
+            num = lambda v: None if v == "" else round(float(v), 1)
+            w.append({"t": r[0], "temp": num(r[1]), "mm": num(r[2]), "wind": num(r[3])})
+        ctx["weather"] = w
+    days = sorted({f["t"][:10] for f in frames})
+    if holidays and os.path.exists(holidays):
+        hol = {r[0]: r[1] for r in csv.reader(open(holidays, encoding="utf-8")) if len(r) >= 2}
+        ctx["holidays"] = {d: hol[d] for d in days if d in hol}
+    if events and os.path.exists(events):
+        import gzip
+        with gzip.open(events, "rt", encoding="utf-8") as f:
+            ev = [e for m in json.load(f)["months"].values() for e in m]
+        out = {}
+        for d in days:
+            hoy = [e for e in ev if e["startDate"][:10] <= d <= e["endDate"][:10]]
+            # lo de semanas (exposiciones, ciclos) no mueve bicis un día concreto
+            cortos = [e for e in hoy if (datetime.fromisoformat(e["endDate"][:10])
+                                         - datetime.fromisoformat(e["startDate"][:10])).days <= 2]
+            counts = {}
+            for e in cortos: counts[e.get("typeEs") or "Otro"] = counts.get(e.get("typeEs") or "Otro", 0) + 1
+            top = [{"type": e.get("typeEs") or "", "name": e["nameEs"].strip('"')[:70],
+                    "place": (e.get("establishmentEs") or "")[:40]}
+                   for e in cortos if e.get("establishmentEs")][:3]
+            out[d] = {"n": len(cortos), "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1])[:4]), "top": top}
+        ctx["events"] = out
+    return ctx
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("stations"); ap.add_argument("measurements")
@@ -98,6 +133,9 @@ def main():
                     help="si se indica, el HTML NO lleva los datos dentro: los pide a esta ruta")
     ap.add_argument("--refresh", type=int, default=0,
                     help="segundos entre refrescos cuando se usa --src (0 = ninguno)")
+    ap.add_argument("--weather", help="CSV ts,temp,mm,viento (horario) de la ventana; opcional")
+    ap.add_argument("--holidays", help="CSV fecha,nombre; opcional")
+    ap.add_argument("--events", help="cosecha de eventos (events_YYYYMMDD.json.gz); opcional")
     a = ap.parse_args()
 
     geo = json.load(open(a.geo, encoding="utf-8"))
@@ -107,7 +145,8 @@ def main():
 
     data = {"center": list(center), "polys": geo["polys"],
             "stations": [{k: s[k] for k in ("id", "n", "x", "y", "c")} for s in st],
-            "frames": frames}
+            "frames": frames,
+            "context": load_context(a.weather, a.holidays, a.events, frames)}
     blob = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     span = (datetime.fromisoformat(frames[-1]["t"]) - datetime.fromisoformat(frames[0]["t"]))
     resumen = (f"{len(st)} estaciones, {len(frames)} frames de {a.minutes} min "

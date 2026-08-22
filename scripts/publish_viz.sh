@@ -31,9 +31,17 @@ Q "SELECT station_id, to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS')
    WHERE ts >= now() - interval '$VENTANA_H hours'
    ORDER BY ts, station_id;" > "$TMP/meas.csv"
 
+# contexto: meteo horaria (Open-Meteo), festivos y la ultima cosecha de eventos
+Q "SELECT to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'), temperature, precipitation, wind_speed
+   FROM weather_measurement
+   WHERE station_id='OPENMETEO' AND ts >= now() - interval '$VENTANA_H hours'
+   ORDER BY ts;" > "$TMP/weather.csv"
+Q "SELECT date, name FROM holiday WHERE date BETWEEN current_date - 3 AND current_date + 1;" > "$TMP/holidays.csv"
+EVENTS=$(ls -1 ~/events/events_*.json.gz 2>/dev/null | tail -1)
+
 python3 ~/build_timelapse.py "$TMP/stations.csv" "$TMP/meas.csv" \
-  --geo ~/donostia-barrios.json --tpl ~/timelapse.tpl.html \
-  --json-only "$TMP/data.json" > /dev/null
+  --geo ~/donostia-barrios.json --tpl ~/timelapse.tpl.html --json-only "$TMP/data.json" \
+  --weather "$TMP/weather.csv" --holidays "$TMP/holidays.csv" ${EVENTS:+--events "$EVENTS"} > /dev/null
 
 # gzip local (no "in flight"): asi el OBJETO queda comprimido y se sirve con
 # content-encoding gzip. 75 KB pasan a 16 KB en el cable. Cache corta: el dato caduca rapido.

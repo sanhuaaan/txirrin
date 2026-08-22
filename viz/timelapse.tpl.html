@@ -45,6 +45,10 @@ h1 em{font-style:italic; font-weight:500; color:var(--ink-2)}
 #time{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums;
       font-size:clamp(30px,4.4vw,54px); line-height:1; letter-spacing:-.02em}
 #day{font-size:12px; color:var(--ink-2); margin-top:.5em; text-transform:capitalize}
+#day .kind{text-transform:none; color:var(--ink-3)}
+#day .kind.fest{color:#e6c56b}
+#wx{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-2); margin-top:.45em}
+#wx .rain{color:#7fb4ff}
 
 /* ---- estadísticas ---- */
 #stats{top:calc(var(--space) + 108px); right:var(--space); display:flex; flex-direction:column; gap:2px;
@@ -54,6 +58,14 @@ h1 em{font-style:italic; font-weight:500; color:var(--ink-2)}
 .stat .k{font-size:11px; color:var(--ink-2); letter-spacing:.03em}
 .stat .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:16px}
 .stat .v small{font-size:11px; color:var(--ink-3)}
+#ev{margin-top:8px; padding-top:8px; border-top:1px solid var(--line); max-width:230px}
+.ev-h{font-size:11px; color:var(--ink-2); letter-spacing:.03em}
+.ev-h span{font-family:"IBM Plex Mono",monospace; color:var(--ink)}
+#ev-counts{font-size:11px; color:var(--ink-3); margin-top:3px; line-height:1.45}
+#ev-list{list-style:none; margin:6px 0 0; padding:0; font-size:11px; line-height:1.4; color:var(--ink-2)}
+#ev-list li{margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+#ev-list b{font-weight:500; color:var(--ink)}
+#ev-list small{color:var(--ink-3)}
 .dot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px}
 .pulse{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px;
        background:#5fd08a; animation:blip 2.4s ease-in-out infinite}
@@ -78,7 +90,9 @@ button{
 }
 button:hover{border-color:var(--ink-3); background:#18222c}
 button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
-#scrub{flex:1; appearance:none; height:3px; border-radius:2px;
+#track{flex:1; display:flex; flex-direction:column; gap:6px; min-width:0}
+#strip{width:100%; height:28px; display:block}
+#scrub{width:100%; appearance:none; height:3px; border-radius:2px;
        background:linear-gradient(90deg,var(--ink-3) 0 var(--pct,0%),var(--line) var(--pct,0%) 100%);
        cursor:pointer}
 #scrub::-webkit-slider-thumb{appearance:none; width:15px; height:15px; border-radius:50%;
@@ -117,6 +131,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div id="clock">
     <div id="time">--:--</div>
     <div id="day">&nbsp;</div>
+    <div id="wx" hidden></div>
   </div>
 </div>
 
@@ -125,6 +140,11 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
+  <div id="ev" hidden>
+    <div class="ev-h">Agenda del día <span id="ev-n"></span></div>
+    <div id="ev-counts"></div>
+    <ul id="ev-list"></ul>
+  </div>
 </div>
 
 <div class="overlay" id="legend">
@@ -139,7 +159,10 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 
 <div class="overlay" id="ctl">
   <button id="play" aria-label="Reproducir o pausar el timelapse">Reproducir</button>
-  <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
+  <div id="track">
+    <canvas id="strip" height="28" aria-hidden="true"></canvas>
+    <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
+  </div>
   <span id="speed"></span>
 </div>
 
@@ -269,13 +292,14 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     cvs.width = Math.round(W * dpr); cvs.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     fitView();
+    strip();
     draw();
   }
   function fitView() {
     // hueco libre: a la izquierda título y leyenda, a la derecha reloj, panel y
     // brújula, arriba cabecera, abajo reproductor. La maqueta se centra en él.
     const narrow = W < 720;
-    const padL = narrow ? 12 : 330, padR = narrow ? 12 : 245, padTop = narrow ? 160 : 150, padBot = narrow ? 120 : 110;
+    const padL = narrow ? 12 : 330, padR = narrow ? 12 : 300, padTop = narrow ? 160 : 150, padBot = narrow ? 120 : 110;
     const fw = W - padL - padR, fh = H - padTop - padBot;
     k = Math.min(fw / (bb[2] - bb[0]), fh / (bb[3] - bb[1]));
     ox = padL + fw / 2 - (ground[0] + ground[2]) / 2 * k;
@@ -330,7 +354,73 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                ful: document.getElementById("s-ful"), scrub: document.getElementById("scrub"),
                live: document.getElementById("s-live"), age: document.getElementById("s-age"),
                play: document.getElementById("play"), speed: document.getElementById("speed"),
-               tip: document.getElementById("tip") };
+               tip: document.getElementById("tip"), wx: document.getElementById("wx"),
+               ev: document.getElementById("ev"), evn: document.getElementById("ev-n"),
+               evc: document.getElementById("ev-counts"), evl: document.getElementById("ev-list"),
+               strip: document.getElementById("strip") };
+  let CTX = DATA.context || {};
+  const fISO = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" });
+  const fNum = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 });
+
+  // --- contexto del frame: meteo de esa hora, tipo de día, eventos del día ---
+  let shownDay = "";
+  function context(fr) {
+    const d = new Date(fr.t + "Z"), dia = fISO.format(d);
+    const W_ = CTX.weather || [];
+    let w = null;
+    for (let i = W_.length - 1; i >= 0; i--) if (W_[i].t <= fr.t) { w = W_[i]; break; }
+    if (w && (w.temp != null)) {
+      el.wx.hidden = false;
+      el.wx.innerHTML = fNum.format(w.temp) + " °C" +
+        (w.mm > 0 ? ' · <span class="rain">' + fNum.format(w.mm) + " mm/h</span>" : " · seco") +
+        (w.wind != null ? " · viento " + fNum.format(w.wind) + " m/s" : "");
+    } else el.wx.hidden = true;
+    if (dia === shownDay) return;
+    shownDay = dia;
+    const hol = (CTX.holidays || {})[dia], wd = d.toLocaleDateString("es-ES", { timeZone: "Europe/Madrid", weekday: "short" });
+    const kind = hol ? "festivo · " + hol : /^(sá|do)/i.test(wd) ? "fin de semana" : "laborable";
+    el.day.innerHTML = fDay.format(d) + ' <span class="kind' + (hol ? " fest" : "") + '">· ' + kind + "</span>";
+    const ev = (CTX.events || {})[dia];
+    if (ev && ev.n) {
+      el.ev.hidden = false; el.evn.textContent = ev.n;
+      el.evc.textContent = Object.entries(ev.counts).map(([k, v]) => v + " " + k.toLowerCase()).join(" · ");
+      el.evl.innerHTML = ev.top.map(e => "<li><b>" + e.name + "</b> <small>· " + e.place + "</small></li>").join("");
+    } else el.ev.hidden = true;
+  }
+
+  // franja sobre el reproductor: lluvia en barras y temperatura en línea,
+  // alineada con el scrubber, así se ve CUÁNDO llovió respecto a la marea
+  function strip() {
+    const c = el.strip, W_ = CTX.weather || [];
+    const dpr = Math.min(devicePixelRatio || 1, 2), cw = c.clientWidth, ch = 28;
+    if (!cw) return;
+    c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr);
+    const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
+    if (!W_.length) return;
+    const t0 = new Date(F[0].t + "Z"), t1 = new Date(F[NF - 1].t + "Z"), span = (t1 - t0) || 1;
+    const X = (t) => 8 + (new Date(t + "Z") - t0) / span * (cw - 16);   // 8 px: medio pomo
+    const temps = W_.map(w => w.temp).filter(v => v != null);
+    const tmin = Math.min(...temps), tmax = Math.max(...temps), tr = Math.max(3, tmax - tmin);
+    const mmax = Math.max(1.5, ...W_.map(w => w.mm || 0));
+    const hw = Math.max(2, (cw - 16) / (span / 36e5) - 1);          // ancho de una hora
+    for (const w of W_) {
+      if (!(w.mm > 0)) continue;
+      const h = Math.max(2, (w.mm / mmax) * (ch - 4));
+      g.fillStyle = "rgba(127,180,255,.55)"; g.fillRect(X(w.t), ch - h, hw, h);
+    }
+    g.beginPath(); g.strokeStyle = "rgba(230,237,243,.55)"; g.lineWidth = 1.2;
+    let first = true;
+    for (const w of W_) {
+      if (w.temp == null) continue;
+      const x = X(w.t) + hw / 2, y = 3 + (1 - (w.temp - tmin) / tr) * (ch - 8);
+      first ? g.moveTo(x, y) : g.lineTo(x, y); first = false;
+    }
+    g.stroke();
+    g.font = '10px "IBM Plex Mono", monospace'; g.fillStyle = "rgba(147,162,176,.8)"; g.textBaseline = "top";
+    g.textAlign = "left"; g.fillText(fNum.format(tmax) + "°", 0, 0);
+    g.textBaseline = "bottom"; g.fillText(fNum.format(tmin) + "°", 0, ch);
+    if (mmax > 1.5) { g.textAlign = "right"; g.fillStyle = "rgba(127,180,255,.8)"; g.fillText(fNum.format(mmax) + " mm/h", cw, ch); }
+  }
   const fTime = new Intl.DateTimeFormat("es-ES", { timeZone:"Europe/Madrid", hour:"2-digit", minute:"2-digit", hour12:false });
   const fDay  = new Intl.DateTimeFormat("es-ES", { timeZone:"Europe/Madrid", weekday:"long", day:"numeric", month:"long" });
 
@@ -556,7 +646,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     el.speed.textContent = HOURS + " h · " + NF + " frames" +
       (zoom > 1.01 ? " · " + zoom.toFixed(1) + "\u00d7" : "");
     el.time.textContent = fTime.format(new Date(fr.t + "Z"));
-    el.day.textContent = fDay.format(new Date(fr.t + "Z"));
+    context(fr);
     el.tot.textContent = tot;
     if (SRC) {                                   // en la web viva, edad del último dato
       const mins = Math.round((Date.now() - new Date(F[NF - 1].t + "Z")) / 6e4);
@@ -792,6 +882,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     const atEdge = pos >= NF - 1.01;                      // ¿estaba mirando el directo?
     const seen = F[Math.min(NF - 1, Math.round(pos))].t;
     F = fresh.frames; NF = F.length; accumulate();
+    CTX = fresh.context || {}; shownDay = ""; strip();
     HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
     setHours();
     if (atEdge) pos = NF - 1;

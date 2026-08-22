@@ -54,7 +54,7 @@ Están separados **a propósito**: en GCS los permisos públicos son a nivel de 
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
 | `weather.sh` | 04:45 del día 2 de cada mes | Euskalmet oficial, idempotente: **año anterior + actual** (suelo en 2026). Los meses ya cargados insertan 0; los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
-| `openmeteo.sh` | 05:40 diario | Últimos 7 días horarios → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
+| `openmeteo.sh` | cada 3 h (xx:40) | Últimos 7 días horarios → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
 
 **Los logs solo recogen errores**: los scripts callan cuando todo va bien, y por eso un log con contenido es señal de que algo pasó. Ojo con `gcloud`, que narra por **stderr**: los scripts que suben a GCS envuelven la llamada para capturarla y hablar solo si falla (`>/dev/null` no la calla y `2>/dev/null` se tragaría los errores de verdad). Verificado en las condiciones del cron: éxito 0 bytes, fallo con el `ERROR` íntegro.
 
@@ -106,7 +106,7 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi --command='.
 
 **https://storage.googleapis.com/cosas-con-datos-en-dbizi-viz/index.html** (la raíz sin `/index.html` devuelve el listado XML del bucket, no la página).
 
-- `publish_viz.sh` consulta Postgres, regenera el JSON con ventana de 24 h y lo sube. La página lo recarga cada 2 min y muestra la edad del último dato.
+- `publish_viz.sh` consulta Postgres, regenera el JSON con ventana de 24 h y lo sube. La página lo recarga cada 2 min y muestra la edad del último dato. El JSON lleva también el **contexto** de la ventana: meteo horaria de `OPENMETEO` (por eso el cron de Open-Meteo pasó de diario a cada 3 h, 2026-08-22), festivos de `holiday` y la última cosecha `~/events/events_*.json.gz` resumida por día.
 - El **relieve** va dentro de la página, no del JSON: `viz/donostia-dem.json` es una rejilla de 195×122 nodos a 50 m con altura (EU-DEM 25 m vía OpenTopoData, `scripts/fetch_dem.py`), máscara de mar (ortofoto PNOA del IGN vía WMS, `scripts/fetch_ortho.py`; necesita Pillow, solo en local) y el Urumea y las playas vectoriales (OpenStreetMap vía Overpass, `scripts/fetch_river.py`). Todo se bajó una vez el 2026-08-22. La página pasa de 26 a 150 KB (37 KB en el cable).
 - **La VM no abre ningún puerto.** Postgres sigue en localhost; lo que se publica son ficheros estáticos, así que no hay superficie de ataque nueva. El precio es el retardo del cron: en el peor caso ves algo de hace ~7 min contando el propio muestreo.
 - Todo se sube con `--gzip-local-all`, no `--gzip-in-flight-all`: el primero deja el **objeto** comprimido, el segundo solo el transporte de subida. Página 26 KB → 9,8 KB; JSON 75 KB → 16 KB.
