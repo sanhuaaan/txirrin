@@ -34,7 +34,7 @@ Q "SELECT station_id, to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS')
 # contexto: meteo horaria (Open-Meteo), festivos y la ultima cosecha de eventos
 Q "SELECT to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'), temperature, precipitation, wind_speed
    FROM weather_measurement
-   WHERE station_id='OPENMETEO' AND ts >= now() - interval '$VENTANA_H hours'
+   WHERE station_id='OPENMETEO' AND ts >= now() - interval '$VENTANA_H hours' - interval '1 hour'
    ORDER BY ts;" > "$TMP/weather.csv"
 Q "SELECT date, name FROM holiday WHERE date BETWEEN current_date - 3 AND current_date + 1;" > "$TMP/holidays.csv"
 EVENTS=$(ls -1 ~/events/events_*.json.gz 2>/dev/null | tail -1)

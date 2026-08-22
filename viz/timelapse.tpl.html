@@ -388,6 +388,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     const W_ = CTX.weather || [];
     let w = null;
     for (let i = W_.length - 1; i >= 0; i--) if (W_[i].t <= fr.t) { w = W_[i]; break; }
+    if (!w && W_.length && W_[0].t.slice(0, 10) === fr.t.slice(0, 10)) w = W_[0];   // primer frame de la ventana
     if (w && (w.temp != null)) {
       el.wx.hidden = false;
       el.wx.innerHTML = fNum.format(w.temp) + " °C" +
@@ -489,7 +490,9 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   // Tinta hipsométrica por bandas de 20 m, oscura a propósito: el suelo es
   // fondo y las columnas figura. (Se probó colorear desde la ortofoto, pixel
   // art; la textura bajo las columnas las hacía más difíciles de leer.)
-  const SEA = hex("#102437"), SEAMASK = DEM.sea;
+  // Agua en verde azulado apagado, a propósito lejos del azul de las columnas
+  // llenas: el agua es fondo y no puede parecer dato.
+  const SEA = hex("#132a33"), RIO = "#3b7c7e";
   const HYPS = [[0, hex("#161f22")], [90, hex("#232e29")], [200, hex("#3e3a31")], [320, hex("#5c554a")]];
   function hyps(h) {
     h = Math.floor(h / 20) * 20;
@@ -540,13 +543,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       const z00 = tz(i, j), z10 = tz(i1, j), z01 = tz(i, j1), z11 = tz(i1, j1);
       const zm = (z00 + z10 + z01 + z11) / 4;
       let fill;
-      if (SEAMASK[j * TNX + i]) {
-        // orilla: el mar pegado a tierra, un punto más claro; dibuja la costa sola
-        const M = SEAMASK, orilla = (i > 0 && !M[j * TNX + i - 1]) || (i < TNX - 2 && !M[j * TNX + i + 2]) ||
-                       (j > 0 && !M[(j - 1) * TNX + i]) || (j < TNY - 2 && !M[(j + 2) * TNX + i]);
-        fill = orilla ? `rgb(${SEA[0]+14},${SEA[1]+22},${SEA[2]+26})` : `rgb(${SEA[0]},${SEA[1]},${SEA[2]})`;
-      }
-      else {
+      {
         // normal de la celda llevada al sistema de la vista: así la sombra
         // depende de hacia dónde mira la ladera respecto a quien mira
         const gx = (z10 + z11 - z00 - z01) / (2 * STP), gy = (z01 + z11 - z00 - z10) / (2 * STP);
@@ -578,7 +575,9 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       g.closePath(); g.stroke();
     }
 
-    // el Urumea, vectorial: a 50 m por celda un río no cabe en el relieve
+    // El mar, vectorial: el contorno de las celdas de mar suavizado. Celda a
+    // celda la costa salía en escalera. El terreno bajo el mar está a cota 0
+    // y la lámina lo tapa.
     const drape = (pts, close) => {
       g.beginPath();
       for (let i = 0; i < pts.length; i++) {
@@ -587,13 +586,22 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       }
       if (close) g.closePath();
     };
-    const rio = `rgb(${SEA[0]+22},${SEA[1]+36},${SEA[2]+44})`;
-    g.fillStyle = rio; g.strokeStyle = rio; g.lineJoin = "round"; g.lineCap = "round";
+    g.fillStyle = `rgb(${SEA[0]},${SEA[1]},${SEA[2]})`; g.strokeStyle = "rgba(92,150,152,.45)";
+    g.lineWidth = 1; g.lineJoin = "round";
+    g.beginPath();
+    for (const ring of DEM.seapolys) {
+      for (let i = 0; i < ring.length; i++) {
+        const q = iso(ring[i][0], ring[i][1], 1.5);
+        i ? g.lineTo(px_(q), py_(q)) : g.moveTo(px_(q), py_(q));
+      }
+      g.closePath();
+    }
+    g.fill("evenodd"); g.stroke();              // evenodd: Santa Clara es un agujero
+    // el Urumea, vectorial: a 50 m por celda un río no cabe en el relieve
+    g.fillStyle = RIO; g.strokeStyle = RIO; g.lineCap = "round";
     for (const w of DEM.water) { drape(w, true); g.fill(); }
     g.lineWidth = Math.max(1.2, 2 * Math.min(2, zoom));
     for (const r of DEM.rivers) { drape(r, false); g.stroke(); }
-    g.fillStyle = "#6f6650";                    // playas: tres manchas de arena
-    for (const b of DEM.beaches) { drape(b, true); g.fill(); }
   }
   // Vuelve a poner, desde la caché, las celdas que quedan DELANTE de una
   // columna y se solapan con ella en pantalla: así una colina tapa lo que

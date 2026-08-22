@@ -6,7 +6,7 @@ que el mar. Aquí se pide al WMS del IGN la ortofoto del recuadro de la
 rejilla, se reduce a un píxel por nodo y se marca como mar lo que está a cota
 0, tiene pinta de agua Y está conectado al borde norte por inundación: así
 entran la bahía, Santa Clara y la ría, y no los tejados del centro. Guarda
-`sea` (0/1 por nodo) en viz/donostia-dem.json. Se ejecuta una vez; necesita
+`seapolys` (contorno suavizado del mar) en viz/donostia-dem.json. Se ejecuta una vez; necesita
 Pillow solo aquí.
 
 (Se probó también colorear cada celda desde la ortofoto, como pixel art. Se
@@ -23,6 +23,43 @@ PX_POR_CELDA = 4
 WMS = ("https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap"
        "&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:4326&BBOX={s},{w},{n},{e}"
        "&WIDTH={W}&HEIGHT={H}&FORMAT=image/png")
+
+
+def contorno(sea, nx, ny, x0, y0, st):
+    """Contorno del mar como polígonos suaves. Pintar el mar celda a celda
+    deja la costa en escalera; aquí se traza el borde de la unión de celdas
+    (aristas sin vecino de mar), se encadena en anillos y se suaviza con
+    Chaikin. Coordenadas en metros locales, celda = cuadrado del nodo."""
+    h = st / 2
+    idx = lambda i, j: j * nx + i
+    es = lambda i, j: 0 <= i < nx and 0 <= j < ny and sea[idx(i, j)]
+    aristas = {}                       # punto inicial -> punto final (orientación CCW)
+    for j in range(ny):
+        for i in range(nx):
+            if not sea[idx(i, j)]: continue
+            cx, cy = x0 + i * st, y0 + j * st
+            a, b, c, d_ = (cx - h, cy - h), (cx + h, cy - h), (cx + h, cy + h), (cx - h, cy + h)
+            if not es(i, j - 1): aristas[a] = b   # sur
+            if not es(i + 1, j): aristas[b] = c   # este
+            if not es(i, j + 1): aristas[c] = d_  # norte
+            if not es(i - 1, j): aristas[d_] = a  # oeste
+    anillos = []
+    while aristas:
+        p0 = next(iter(aristas)); ring = [p0]; p = aristas.pop(p0)
+        while p != p0 and p in aristas:
+            ring.append(p); p = aristas.pop(p)
+        if len(ring) >= 8: anillos.append(ring)
+    out = []
+    for r in anillos:
+        for _ in range(3):             # Chaikin: cada vuelta redondea las esquinas
+            q = []
+            for k in range(len(r)):
+                a, b = r[k], r[(k + 1) % len(r)]
+                q.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
+                q.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
+            r = q
+        out.append([[round(p[0]), round(p[1])] for p in r[::2]])   # la mitad de puntos basta
+    return out
 
 
 def main():
@@ -62,7 +99,8 @@ def main():
             if 0 <= a < nx and 0 <= b < ny and not sea[b * nx + a] \
                and z[b * nx + a] <= 0 and agua(cols[b * nx + a]):
                 stack.append((a, b))
-    d["sea"] = [1 if v else 0 for v in sea]
+    d.pop("sea", None)                 # la página usa el contorno, no las celdas
+    d["seapolys"] = contorno(sea, nx, ny, x0, y0, st)
     for k in ("pal", "c"): d.pop(k, None)
     d["note"] = d["note"].split(";")[0] + "; sea: máscara de mar por inundación desde la ortofoto PNOA (scripts/fetch_ortho.py)"
     json.dump(d, open(DEM, "w"), separators=(",", ":"))
