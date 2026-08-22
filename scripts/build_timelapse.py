@@ -24,6 +24,8 @@ histórico de una vez.
 """
 import argparse
 import csv
+import html
+import re
 import json
 import math
 import os
@@ -82,6 +84,19 @@ def build_frames(path, st, minutes):
     return frames
 
 
+HORA = re.compile(r"(?<!\d)([01]?\d|2[0-3])[:.]([0-5]\d)(?!\d)|(?:a\s+las|a\s+partir\s+de\s+las)\s+([01]?\d|2[0-3])\s*(?:h\b|horas)", re.I)
+
+
+def hora_de(e):
+    """Kulturklik no publica hora de comienzo (startDate va a las 00:00): se
+    rescata de la descripción cuando la menciona de forma clara. Si no, None."""
+    txt = html.unescape(re.sub(r"<[^>]+>", " ", (e.get("descriptionEs") or "") + " " + (e.get("nameEs") or "")))
+    for m in HORA.finditer(txt):
+        h = int(m.group(1) or m.group(3)); mi = int(m.group(2) or 0)
+        if 7 <= h <= 23: return f"{h:02d}:{mi:02d}"
+    return None
+
+
 def load_context(weather, holidays, events, frames):
     """Lo que rodea a la marea: meteo horaria, tipo de día y eventos. Todo es
     opcional; la página funciona sin nada de esto."""
@@ -110,8 +125,8 @@ def load_context(weather, holidays, events, frames):
             counts = {}
             for e in cortos: counts[e.get("typeEs") or "Otro"] = counts.get(e.get("typeEs") or "Otro", 0) + 1
             items = sorted(({"type": e.get("typeEs") or "", "name": e["nameEs"].strip('"')[:90],
-                             "place": (e.get("establishmentEs") or "")[:50]} for e in cortos),
-                           key=lambda e: (e["type"], e["name"]))
+                             "place": (e.get("establishmentEs") or "")[:50], "h": hora_de(e)} for e in cortos),
+                           key=lambda e: (e["h"] or "99", e["type"], e["name"]))
             out[d] = {"n": len(cortos), "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1])[:4]), "items": items}
         ctx["events"] = out
     return ctx
