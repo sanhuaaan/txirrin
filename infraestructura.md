@@ -102,7 +102,7 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi --command='.
 
 **Migrar el esquema antes de copiar los `.py`**: el collector corre cada 2 min y fallaría al escribir una columna que aún no existe. Y no olvidar los tres ficheros de `viz/`: sin ellos `publish_viz.sh` no arranca. Tras tocar la plantilla, el relieve o `build_timelapse.py` hay que republicar la página: `PUBLICAR_HTML=1 ~/publish_viz.sh` en la VM (el cron solo regenera el JSON).
 
-## Web viva del timelapse
+## Web viva del timelapse («Txirrin»)
 
 **https://storage.googleapis.com/cosas-con-datos-en-dbizi-viz/index.html** (la raíz sin `/index.html` devuelve el listado XML del bucket, no la página).
 
