@@ -2,10 +2,13 @@
 # Regenera el JSON del timelapse desde Postgres y lo sube al bucket publico.
 # La VM no abre ningun puerto: publica ficheros estaticos y ya.
 # Cron cada 5 min. VENTANA_H controla cuantas horas se publican.
+# PUBLICAR_HTML=1 regenera y sube tambien index.html (la pagina cambia poco:
+# solo hace falta tras tocar la plantilla, el relieve o build_timelapse.py).
 set -euo pipefail
 . ~/.dbizi.env
 
 VENTANA_H=${VENTANA_H:-24}
+PUBLICAR_HTML=${PUBLICAR_HTML:-0}
 BUCKET=gs://cosas-con-datos-en-dbizi-viz
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
@@ -36,3 +39,11 @@ python3 ~/build_timelapse.py "$TMP/stations.csv" "$TMP/meas.csv" \
 # content-encoding gzip. 75 KB pasan a 16 KB en el cable. Cache corta: el dato caduca rapido.
 gcs cp -q --gzip-local-all --cache-control="public, max-age=60" \
   "$TMP/data.json" "$BUCKET/data.json"
+
+if [ "$PUBLICAR_HTML" = 1 ]; then
+  python3 ~/build_timelapse.py "$TMP/stations.csv" "$TMP/meas.csv" \
+    --geo ~/donostia-barrios.json --tpl ~/timelapse.tpl.html --dem ~/donostia-dem.json \
+    --src data.json --refresh 120 --out "$TMP/index.html"
+  gcs cp -q --gzip-local-all --cache-control="public, max-age=300" \
+    "$TMP/index.html" "$BUCKET/index.html"
+fi

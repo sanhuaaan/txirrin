@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Donostia respira</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -108,7 +110,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 <div class="overlay" id="head">
   <div>
     <h1>Donostia <em>respira</em></h1>
-    <p class="sub">28 horas de la red Dbizi. Cada columna es una estación:
+    <p class="sub"><span id="hours">Las últimas horas</span> de la red Dbizi. Cada columna es una estación:
       la altura son las bicis que hay dentro; el color, si eso es mucho o poco
       para ella.</p>
   </div>
@@ -147,6 +149,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 const EMBEDDED   = __DATA__;      // objeto en la versión estática, null en la viva
 const SRC        = "__SRC__";     // ruta al JSON cuando los datos son remotos
 const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
+const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_dem.py)
 </script>
 <script>
 (async () => {
@@ -172,6 +175,8 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
   const N = S.length;
   let NF = F.length;
   let HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
+  const setHours = () => { document.getElementById("hours").textContent = HOURS + " horas"; };
+  setHours();
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // --- proyección axonométrica: azimut (giro) + elevación (inclinación) ---
@@ -181,10 +186,11 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
   let tilt = T0, tS = Math.sin(T0), tC = Math.cos(T0), zf = 1;
   const M_PER_BIKE = 46, SIDE = 115;           // metros por bici / lado de la columna
 
-  // Centroide de las estaciones: es el eje del giro, así la ciudad rota sobre
-  // sí misma en vez de describir una órbita alrededor de un origen arbitrario.
-  const cx = S.reduce((a, s) => a + s.x, 0) / S.length;
-  const cy = S.reduce((a, s) => a + s.y, 0) / S.length;
+  // El centro de la maqueta es el eje del giro: rota sobre sí misma en vez de
+  // orbitar, y el círculo que la contiene (el encuadre) es el mínimo posible.
+  // Antes era el centroide de estaciones; con el relieve el objeto es la maqueta.
+  const cx = (DEM.x0 * 2 + (DEM.nx - 1) * DEM.step) / 2;
+  const cy = (DEM.y0 * 2 + (DEM.ny - 1) * DEM.step) / 2;
   let rot = 0, rotC = 1, rotS = 0;
   const setRot = (r) => { rot = r; rotC = Math.cos(r); rotS = Math.sin(r); };
 
@@ -199,20 +205,39 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
   };
   const depth = (x, y) => (x - cx) * (rotC + rotS) - (y - cy) * (rotC - rotS);
 
+  // --- relieve ---
+  // EU-DEM a 100 m, exagerado: a escala real Urgull sería una arruga al lado
+  // de columnas de 46 m por bici. Con x2.2 Ulia (295 m) mide lo que 14 bicis.
+  const EXAG = 2.2, BASE = 140;                // exageración / grosor de la maqueta
+  const TX0 = DEM.x0, TY0 = DEM.y0, TSTEP = DEM.step, TNX = DEM.nx, TNY = DEM.ny;
+  const TZ = Float32Array.from(DEM.z, v => v * EXAG);
+  const TX1 = TX0 + (TNX - 1) * TSTEP, TY1 = TY0 + (TNY - 1) * TSTEP;
+  const tz = (i, j) => TZ[j * TNX + i];
+  function hAt(x, y) {                          // bilineal; fuera de la rejilla, el borde
+    const u = Math.min(TNX - 1.001, Math.max(0, (x - TX0) / TSTEP));
+    const v = Math.min(TNY - 1.001, Math.max(0, (y - TY0) / TSTEP));
+    const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j;
+    return (tz(i, j) * (1 - fu) + tz(i + 1, j) * fu) * (1 - fv)
+         + (tz(i, j + 1) * (1 - fu) + tz(i + 1, j + 1) * fu) * fv;
+  }
+  for (const s of S) s.z = hAt(s.x, s.y);       // cada columna nace en su cota
+
   // --- encuadre INVARIANTE al giro ---
   // Ajustar al bbox real de cada ángulo haría que la ciudad creciese y menguase
   // al arrastrar. Se ajusta al círculo que la contiene: como la isométrica suma
   // los dos ejes, sale solo un ~5% más holgado que el ajuste ceñido, y a cambio
   // la escala no se mueve ni un píxel mientras giras.
   const maxCap = Math.max(...S.map(s => s.c));
-  const maxH = maxCap * M_PER_BIKE;
-  const R = Math.max(...S.map(s => Math.hypot(s.x - cx, s.y - cy)));
+  const maxH = maxCap * M_PER_BIKE + Math.max(...TZ);
+  // la maqueta entera, no solo las estaciones: el relieve llega más lejos
+  const R = Math.max(...[[TX0, TY0], [TX1, TY0], [TX0, TY1], [TX1, TY1]]
+                     .map(c => Math.hypot(c[0] - cx, c[1] - cy)));
   const D = R * Math.SQRT2;
   let bb = [];
   function computeFit() {
     // el suelo se estira al ir hacia lo cenital y las columnas se acortan,
     // así que el encuadre depende de la inclinación
-    bb = [-D * CX, -D * CX * tS - maxH * zf, D * CX, D * CX * tS];
+    bb = [-D * CX, -D * CX * tS - maxH * zf, D * CX, D * CX * tS + BASE * zf];
   }
   function setTilt(t) {
     tilt = Math.min(TMAX, Math.max(TMIN, t));
@@ -234,7 +259,7 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
     draw();
   }
   function fitView() {
-    const padX = W < 720 ? 24 : 150, padTop = W < 720 ? 150 : 190, padBot = 130;
+    const padX = W < 720 ? 16 : 110, padTop = W < 720 ? 150 : 170, padBot = 120;
     k = Math.min((W - padX * 2) / (bb[2] - bb[0]), (H - padTop - padBot) / (bb[3] - bb[1]));
     ox = (W - (bb[2] - bb[0]) * k) / 2 - bb[0] * k;
     oy = padTop + (H - padTop - padBot - (bb[3] - bb[1]) * k) / 2 - bb[1] * k;
@@ -307,21 +332,129 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
   const painter = () => idxs.slice().sort((a, b) =>
     depth(S[a].x, S[a].y) - depth(S[b].x, S[b].y));
 
+  // --- el terreno se pinta una vez por vista y se reutiliza en cada frame ---
+  // Son ~6000 celdas: a 60 fps con interpolación sería el cuello de botella,
+  // pero solo cambian con giro, inclinación, zoom o pan, no con el tiempo.
+  const tcv = document.createElement("canvas"), tctx = tcv.getContext("2d");
+  const NC = (TNX - 1) * (TNY - 1);
+  const cDepth = new Float32Array(NC), cBox = new Float32Array(NC * 4);
+  const cOrder = new Int32Array(NC);
+  let tKey = "";
+  // tinta hipsométrica por bandas de 20 m: lo que hace que se lea como maqueta
+  const SEA = hex("#102437");
+  const HYPS = [[0, hex("#1b2a2b")], [90, hex("#2c3b33")], [200, hex("#514c3e")], [320, hex("#7a705e")]];
+  function hyps(h) {
+    h = Math.floor(h / 20) * 20;
+    let a = HYPS[0], b = HYPS[HYPS.length - 1];
+    for (let i = 1; i < HYPS.length; i++) if (h <= HYPS[i][0]) { a = HYPS[i - 1]; b = HYPS[i]; break; }
+    return lerp(a[1], b[1], Math.min(1, (h - a[0]) / (b[0] - a[0])));
+  }
+  const px_ = (p) => p[0] * k * zoom + ox + panX, py_ = (p) => p[1] * k * zoom + oy + panY;
+  function renderTerrain() {
+    const key = [rot, tilt, zoom, panX, panY, W, H].join("|");
+    if (key === tKey) return;
+    tKey = key;
+    tcv.width = cvs.width; tcv.height = cvs.height;
+    const dpr = cvs.width / W;
+    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    tctx.fillStyle = "#0c1116"; tctx.fillRect(0, 0, W, H);
+    const g = tctx;
+
+    // paredes de la maqueta: se pintan antes y el terreno tapa las de atrás
+    const edges = [];
+    const row = (j, rev) => { const a = []; for (let i = 0; i < TNX; i++) a.push([TX0 + i * TSTEP, TY0 + j * TSTEP]); return rev ? a.reverse() : a; };
+    const col = (i, rev) => { const a = []; for (let j = 0; j < TNY; j++) a.push([TX0 + i * TSTEP, TY0 + j * TSTEP]); return rev ? a.reverse() : a; };
+    edges.push(row(0, false), col(TNX - 1, false), row(TNY - 1, true), col(0, true));
+    for (const e of edges) {
+      g.beginPath();
+      for (let i = 0; i < e.length; i++) { const q = iso(e[i][0], e[i][1], hAt(e[i][0], e[i][1])); i ? g.lineTo(px_(q), py_(q)) : g.moveTo(px_(q), py_(q)); }
+      for (let i = e.length - 1; i >= 0; i--) { const q = iso(e[i][0], e[i][1], -BASE); g.lineTo(px_(q), py_(q)); }
+      g.closePath(); g.fillStyle = "#121820"; g.fill();
+      g.strokeStyle = "rgba(93,107,120,.35)"; g.lineWidth = 1; g.stroke();
+    }
+
+    // luz fija respecto al observador (arriba-izquierda), como en las columnas
+    const LX = -0.6, LY = 0.2, LZ = 0.75, LN = Math.hypot(LX, LY, LZ);
+    // orden del pintor: de lejos a cerca, según el giro
+    for (let c = 0; c < NC; c++) {
+      const i = c % (TNX - 1), j = (c / (TNX - 1)) | 0;
+      cDepth[c] = depth(TX0 + (i + .5) * TSTEP, TY0 + (j + .5) * TSTEP);
+      cOrder[c] = c;
+    }
+    cOrder.sort((a, b) => cDepth[a] - cDepth[b]);
+    for (let n = 0; n < NC; n++) {
+      const c = cOrder[n], i = c % (TNX - 1), j = (c / (TNX - 1)) | 0;
+      const x0 = TX0 + i * TSTEP, y0 = TY0 + j * TSTEP, x1 = x0 + TSTEP, y1 = y0 + TSTEP;
+      const z00 = tz(i, j), z10 = tz(i + 1, j), z01 = tz(i, j + 1), z11 = tz(i + 1, j + 1);
+      const zm = (z00 + z10 + z01 + z11) / 4;
+      let fill;
+      if (zm <= 0) fill = `rgb(${SEA[0]},${SEA[1]},${SEA[2]})`;
+      else {
+        // normal de la celda llevada al sistema de la vista: así la sombra
+        // depende de hacia dónde mira la ladera respecto a quien mira
+        const gx = (z10 + z11 - z00 - z01) / (2 * TSTEP), gy = (z01 + z11 - z00 - z10) / (2 * TSTEP);
+        const nx = -gx, ny = gy;                // dy = cy - y invierte el eje norte
+        const rx = nx * rotC - ny * rotS, ry = nx * rotS + ny * rotC;
+        const nn = Math.hypot(rx, ry, 1);
+        const d = (rx * LX + ry * LY + LZ) / (nn * LN);
+        fill = shade(hyps(zm / EXAG), 0.62 + 0.55 * Math.max(0, d));
+      }
+      const a = iso(x0, y0, z00), b = iso(x1, y0, z10), cc = iso(x1, y1, z11), dd = iso(x0, y1, z01);
+      const ax = px_(a), ay = py_(a), bx = px_(b), by = py_(b), cx2 = px_(cc), cy2 = py_(cc), dx = px_(dd), dy = py_(dd);
+      cBox[c * 4] = Math.min(ax, bx, cx2, dx); cBox[c * 4 + 1] = Math.min(ay, by, cy2, dy);
+      cBox[c * 4 + 2] = Math.max(ax, bx, cx2, dx); cBox[c * 4 + 3] = Math.max(ay, by, cy2, dy);
+      if (cBox[c * 4 + 2] < 0 || cBox[c * 4] > W || cBox[c * 4 + 3] < 0 || cBox[c * 4 + 1] > H) continue;
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(cx2, cy2); g.lineTo(dx, dy); g.closePath();
+      g.fillStyle = fill; g.fill();
+      // medio píxel de borde del mismo color: sin él quedan hilos entre celdas
+      g.strokeStyle = fill; g.lineWidth = 0.6; g.stroke();
+    }
+
+    // barrios drapeados sobre el relieve, solo el contorno
+    g.lineWidth = 1; g.strokeStyle = "rgba(150,165,180,.28)";
+    for (const p of POLYS) {
+      g.beginPath();
+      for (let i = 0; i < p.length; i++) {
+        const q = iso(p[i][0], p[i][1], hAt(p[i][0], p[i][1]) + 3);
+        i ? g.lineTo(px_(q), py_(q)) : g.moveTo(px_(q), py_(q));
+      }
+      g.closePath(); g.stroke();
+    }
+  }
+  // Vuelve a poner, desde la caché, las celdas que quedan DELANTE de una
+  // columna y se solapan con ella en pantalla: así una colina tapa lo que
+  // tiene detrás. Se excluye la celda en la que se apoya la columna (umbral
+  // de un paso), que pintada encima borraría el pie de las caras delanteras.
+  function occlude(s, h, half) {
+    const cd = depth(s.x, s.y) + TSTEP;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [ex, ey] of [[-half, -half], [half, -half], [half, half], [-half, half]]) {
+      for (const z of [s.z, s.z + h]) {
+        const q = iso(s.x + ex, s.y + ey, z), X = sx(q), Y = sy(q);
+        if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
+      }
+    }
+    let did = false;
+    for (let c = 0; c < NC; c++) {
+      if (cDepth[c] <= cd) continue;
+      const b = c * 4;
+      if (cBox[b + 2] < x0 || cBox[b] > x1 || cBox[b + 3] < y0 || cBox[b + 1] > y1) continue;
+      const i = c % (TNX - 1), j = (c / (TNX - 1)) | 0;
+      const X0 = TX0 + i * TSTEP, Y0 = TY0 + j * TSTEP, X1 = X0 + TSTEP, Y1 = Y0 + TSTEP;
+      const a = iso(X0, Y0, tz(i, j)), bq = iso(X1, Y0, tz(i + 1, j)),
+            cq = iso(X1, Y1, tz(i + 1, j + 1)), dq = iso(X0, Y1, tz(i, j + 1));
+      if (!did) { ctx.save(); did = true; }
+      ctx.beginPath(); ctx.moveTo(sx(a), sy(a)); ctx.lineTo(sx(bq), sy(bq));
+      ctx.lineTo(sx(cq), sy(cq)); ctx.lineTo(sx(dq), sy(dq)); ctx.closePath();
+    }
+    if (did) { ctx.clip(); ctx.drawImage(tcv, 0, 0, W, H); ctx.restore(); }
+  }
+
   function draw() {
     if (!bb) return;
     const fr = sample();
-    ctx.fillStyle = "#0c1116"; ctx.fillRect(0, 0, W, H);
-
-    // suelo: los 20 barrios, discretos, solo para reconocer la ciudad
-    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(93,107,120,.30)"; ctx.fillStyle = "rgba(19,27,35,.55)";
-    for (const p of POLYS) {
-      ctx.beginPath();
-      for (let i = 0; i < p.length; i++) {
-        const q = iso(p[i][0], p[i][1], 0);
-        i ? ctx.lineTo(sx(q), sy(q)) : ctx.moveTo(sx(q), sy(q));
-      }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-    }
+    renderTerrain();
+    ctx.drawImage(tcv, 0, 0, W, H);
 
     const half = SIDE / 2;
     let tot = 0, emp = 0, ful = 0;
@@ -331,8 +464,10 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
       tot += nb; if (nb <= 0) emp++; if (nb >= cap) ful++;
 
       basePlate(s, half);   // ancla la estación aunque no tenga ni una bici
-      if (v > .05) column(s, v * M_PER_BIKE, half, ramp(Math.min(1, v / cap)));
+      const h = v > .05 ? v * M_PER_BIKE : 0;
+      if (h) column(s, h, half, ramp(Math.min(1, v / cap)));
       else emptyMark(s, half);
+      occlude(s, h, half);
     }
 
     compass();
@@ -377,7 +512,7 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
     ctx.fillStyle = fill; ctx.fill();
   }
   function column(s, h, half, c) {
-    const x = s.x, y = s.y;
+    const x = s.x, y = s.y, z = s.z; h += z;
     const B = [[x-half,y-half],[x+half,y-half],[x+half,y+half],[x-half,y+half]];
     // Las CUATRO caras, de atrás a delante. Antes se pintaban dos fijas, y las
     // fijas no son las que dan al observador: a 0° tocaban sur y este, y se
@@ -389,25 +524,25 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
       faces.push([a, b, depth(a[0], a[1]) + depth(b[0], b[1])]);
     }
     faces.sort((p, q) => p[2] - q[2]);
-    const pc = iso(x, y, 0);
+    const pc = iso(x, y, z);
     for (const [a, b] of faces) {
       // el tono sale de hacia dónde mira la cara en pantalla: luz fija respecto
       // al observador, así el volumen se lee igual a cualquier ángulo
-      const pm = iso((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0);
+      const pm = iso((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
       const vx = pm[0] - pc[0], vy = pm[1] - pc[1];
-      quad(iso(a[0],a[1],0), iso(a[0],a[1],h), iso(b[0],b[1],h), iso(b[0],b[1],0),
+      quad(iso(a[0],a[1],z), iso(a[0],a[1],h), iso(b[0],b[1],h), iso(b[0],b[1],z),
            shade(c, 0.70 + 0.24 * (vx / (Math.hypot(vx, vy) || 1))));
     }
     quad(iso(x-half,y-half,h), iso(x+half,y-half,h), iso(x+half,y+half,h), iso(x-half,y+half,h),
          shade(c, 1.12));
   }
   function basePlate(s, half) {
-    const x = s.x, y = s.y;
-    quad(iso(x-half,y-half,0), iso(x+half,y-half,0), iso(x+half,y+half,0), iso(x-half,y+half,0),
+    const x = s.x, y = s.y, z = s.z + 2;
+    quad(iso(x-half,y-half,z), iso(x+half,y-half,z), iso(x+half,y+half,z), iso(x-half,y+half,z),
          "rgba(93,107,120,.22)");
   }
   function emptyMark(s, half) {                 // vacía: la ausencia también se dibuja
-    const c = iso(s.x, s.y, 0);
+    const c = iso(s.x, s.y, s.z + 2);
     ctx.strokeStyle = "var(--empty)"; ctx.strokeStyle = "#e66767"; ctx.lineWidth = 1.6;
     ctx.beginPath(); ctx.arc(sx(c), sy(c), 3.6, 0, 6.284); ctx.stroke();
   }
@@ -417,7 +552,7 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
   function hit(px, py) {
     let best = -1, bd = 22 * 22;
     for (let i = 0; i < N; i++) {
-      const p = iso(S[i].x, S[i].y, Math.max(bikes[i], 1) * M_PER_BIKE);
+      const p = iso(S[i].x, S[i].y, S[i].z + Math.max(bikes[i], 1) * M_PER_BIKE);
       const dx = sx(p) - px, dy = sy(p) - py, d = dx*dx + dy*dy;
       if (d < bd) { bd = d; best = i; }
     }
@@ -517,7 +652,7 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
     if (!playing) return;
     const dt = now - last; last = now;
     pos += dt / SPF;
-    if (pos >= NF - 1) { pos = 0; }
+    if (!(pos >= 0) || pos >= NF - 1) { pos = 0; }   // también si el reloj dio NaN
     draw();
     requestAnimationFrame(tick);
   }
@@ -552,6 +687,7 @@ const REFRESH_MS = __REFRESH__;   // 0 = sin refresco
     const seen = F[Math.min(NF - 1, Math.round(pos))].t;
     F = fresh.frames; NF = F.length;
     HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
+    setHours();
     if (atEdge) pos = NF - 1;
     else { const i = F.findIndex(f => f.t >= seen); pos = i < 0 ? NF - 1 : i; }
     draw();

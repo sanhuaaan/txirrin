@@ -90,6 +90,8 @@ def main():
     ap.add_argument("--geo", default=os.path.join(ROOT, "viz", "donostia-barrios.json"),
                     help="geometría de barrios (en la VM los ficheros van planos)")
     ap.add_argument("--tpl", default=os.path.join(ROOT, "viz", "timelapse.tpl.html"))
+    ap.add_argument("--dem", default=os.path.join(ROOT, "viz", "donostia-dem.json"),
+                    help="relieve (rejilla de scripts/fetch_dem.py); va dentro del HTML, no del JSON")
     ap.add_argument("--json-only", metavar="RUTA",
                     help="escribe solo el JSON de datos, sin HTML (para la web viva)")
     ap.add_argument("--src", default="",
@@ -118,12 +120,16 @@ def main():
         return
 
     tpl = open(a.tpl, encoding="utf-8").read()
-    for marca in ("__DATA__", "__SRC__", "__REFRESH__"):
+    for marca in ("__DATA__", "__SRC__", "__REFRESH__", "__DEM__"):
         if marca not in tpl:
             sys.exit(f"la plantilla no tiene el marcador {marca}")
+    # el relieve es estático: se embebe en la página, así el JSON vivo sigue
+    # llevando solo lo que cambia
+    dem = open(a.dem, encoding="utf-8").read().strip()
     html = (tpl.replace("__DATA__", "null" if a.src else blob)
                .replace("__SRC__", a.src)
-               .replace("__REFRESH__", str(a.refresh * 1000)))
+               .replace("__REFRESH__", str(a.refresh * 1000))
+               .replace("__DEM__", dem))
     if os.path.dirname(a.out):
         os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:

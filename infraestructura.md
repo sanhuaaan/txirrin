@@ -67,7 +67,7 @@ El cron de visualización va a **minutos impares** para no coincidir con el coll
 - **`ingest_raw.sh [YYYYMMDD ...]`** — la red de seguridad. Si Postgres estuvo caído, el crudo sigue en disco y esto lo reingesta: idempotente, salta ficheros truncados o vacíos, y rellena `fetched_at` desde el nombre del fichero. Estrenado el 2026-08-21 recuperando 3 snapshots perdidos por un `OperationalError` del collector.
 - **`openmeteo.sh <días>` o `<inicio> <fin>`** — rehace huecos de meteo reciente. Con dos fechas usa la API de archivo, que va ~2 días por detrás; para lo más reciente, la forma de días (máx. 92).
 - **`ingest.sh`** — equivalente para el clon git de `dbizi-raw` (`backfill.py`). Solo valor histórico: ese repo está retirado.
-- **`build_timelapse.py`** — genera el timelapse en sus dos variantes (ver más abajo).
+- **`build_timelapse.py`** — genera el timelapse en sus dos variantes (ver más abajo). `fetch_dem.py` (solo en el repo) bajó el relieve una vez.
 
 ## Tablas (BD `dbizi`, esquema en `sql/schema.sql`)
 
@@ -92,7 +92,7 @@ Dos trampas del modelo, ambas documentadas en el propio `schema.sql`:
 
 ```bash
 gcloud compute scp sql/schema.sql scripts/*.py scripts/*.sh \
-  viz/donostia-barrios.json viz/timelapse.tpl.html \
+  viz/donostia-barrios.json viz/donostia-dem.json viz/timelapse.tpl.html \
   dbizi-vm:~/ --zone=us-west1-a --configuration=dbizi
 
 gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi --command='. ~/.dbizi.env
@@ -100,13 +100,14 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi --command='.
     psql -U dbizi -d dbizi -v ON_ERROR_STOP=1 -f - < ~/schema.sql'
 ```
 
-**Migrar el esquema antes de copiar los `.py`**: el collector corre cada 2 min y fallaría al escribir una columna que aún no existe. Y no olvidar los dos ficheros de `viz/`: sin ellos `publish_viz.sh` no arranca.
+**Migrar el esquema antes de copiar los `.py`**: el collector corre cada 2 min y fallaría al escribir una columna que aún no existe. Y no olvidar los tres ficheros de `viz/`: sin ellos `publish_viz.sh` no arranca. Tras tocar la plantilla, el relieve o `build_timelapse.py` hay que republicar la página: `PUBLICAR_HTML=1 ~/publish_viz.sh` en la VM (el cron solo regenera el JSON).
 
 ## Web viva del timelapse
 
 **https://storage.googleapis.com/cosas-con-datos-en-dbizi-viz/index.html** (la raíz sin `/index.html` devuelve el listado XML del bucket, no la página).
 
 - `publish_viz.sh` consulta Postgres, regenera el JSON con ventana de 24 h y lo sube. La página lo recarga cada 2 min y muestra la edad del último dato.
+- El **relieve** va dentro de la página, no del JSON: `viz/donostia-dem.json` es una rejilla de 98×62 alturas a 100 m (EU-DEM 25 m vía OpenTopoData, `scripts/fetch_dem.py`, se bajó una vez el 2026-08-22). La página pasa de 26 a 51 KB (20 KB en el cable).
 - **La VM no abre ningún puerto.** Postgres sigue en localhost; lo que se publica son ficheros estáticos, así que no hay superficie de ataque nueva. El precio es el retardo del cron: en el peor caso ves algo de hace ~7 min contando el propio muestreo.
 - Todo se sube con `--gzip-local-all`, no `--gzip-in-flight-all`: el primero deja el **objeto** comprimido, el segundo solo el transporte de subida. Página 26 KB → 9,8 KB; JSON 75 KB → 16 KB.
 - `VENTANA_H=48 ~/publish_viz.sh` publica más horas.
