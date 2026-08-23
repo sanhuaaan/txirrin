@@ -78,6 +78,7 @@ button#ev .n{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:
 #ev-list li{padding:7px 0; border-top:1px solid var(--line); display:flex; gap:14px; align-items:baseline}
 #ev-list .h{flex:none; width:5.2em; font-family:"IBM Plex Mono",monospace; font-size:14px; color:var(--ink)}
 #ev-list .h.nh{font-family:inherit; font-size:10px; color:var(--ink-3); line-height:1.2}
+#ev-list .h small{font-family:"IBM Plex Sans",sans-serif; font-size:10px; color:var(--ink-3)}
 #ev-list .t{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3)}
 #ev-list b{font-weight:500; display:block}
 #ev-list small{color:var(--ink-2)}
@@ -414,7 +415,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       document.getElementById("ev-title").textContent = "Agenda · " + fDay.format(d);
       el.evc.textContent = Object.entries(ev.counts).map(([k, v]) => v + " " + k.toLowerCase()).join(" · ");
       const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-      el.evl.innerHTML = (ev.items || []).map(e => "<li><span class=\"h" + (e.h ? "" : " nh") + "\">" + (e.h || "hora no publicada") + "</span><div>" +
+      el.evl.innerHTML = (ev.items || []).map(e => "<li><span class=\"h" + (e.h ? "" : " nh") + "\">" + (e.h || "hora no publicada") +
+        (e.confirmed === false ? "<br><small>provisional</small>" : "") + "</span><div>" +
         "<span class=\"t\">" + esc(e.type) + "</span><b>" + esc(e.name) + "</b>" +
         (e.place ? "<small>" + esc(e.place) + "</small>" : "") + "</div></li>").join("");
     } else el.ev.hidden = true;
@@ -679,6 +681,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       else if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
     }
     el.shut.hidden = !shut;
+    venues(fr);
     // etiquetas solo de las que fallan ahora, encima de todo
     ctx.font = '500 10px "IBM Plex Sans", sans-serif'; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     const placed = [];
@@ -716,6 +719,30 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     el.scrub.value = String(Math.round(pct));
     el.scrub.style.setProperty("--pct", pct.toFixed(1) + "%");
     if (hover >= 0) placeTip();
+  }
+
+  // Eventos con sitio (Anoeta, Illumbe, la bahía, el Boulevard): un anillo
+  // sobre el recinto desde hora y media antes hasta una hora después, con
+  // nombre y hora. Es lo que más mueve la red y lo que Kulturklik no tiene.
+  function venues(fr) {
+    const dia = fISO.format(new Date(fr.t + "Z")), ev = (CTX.events || {})[dia];
+    if (!ev) return;
+    const t = new Date(fr.t + "Z");
+    for (const e of ev.items || []) {
+      if (e.x == null || !e.s) continue;
+      const s0 = new Date(e.s + "Z"), e0 = new Date(e.e + "Z");
+      if (t < s0 - 90 * 6e4 || t > e0.getTime() + 60 * 6e4) continue;
+      const live = t >= s0 && t <= e0;
+      const q = iso(e.x, e.y, hAt(e.x, e.y) + 6), X = sx(q), Y = sy(q), r = 7 + 4 * Math.min(2, zoom);
+      ctx.beginPath(); ctx.arc(X, Y, r, 0, 6.284);
+      ctx.strokeStyle = live ? "#f0d47a" : "rgba(240,212,122,.55)"; ctx.lineWidth = live ? 2 : 1.2;
+      if (!live) ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(X, Y, 2.2, 0, 6.284); ctx.fillStyle = "#f0d47a"; ctx.fill();
+      ctx.font = '500 10px "IBM Plex Sans", sans-serif'; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      const txt = e.name + " · " + e.h;
+      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(12,17,22,.85)"; ctx.strokeText(txt, X + r + 5, Y);
+      ctx.fillStyle = "#f0d47a"; ctx.fillText(txt, X + r + 5, Y);
+    }
   }
 
   function compass() {

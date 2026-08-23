@@ -94,8 +94,8 @@ Variable fundamental para distinguir comportamiento normal: día de la semana, l
 Una de las fuentes más interesantes para explicar anomalías. Cubierta con (detalle en el anexo de [`fase-0-fuentes.md`](fase-0-fuentes.md)):
 
 1. **API Kulturklik** (`api.euskadi.eus/culture/events/v1.0/events/byMonth/{y}/{m}/byMunicipality/20/82`, sin key; publicada en el [portal de APIs del Gobierno Vasco](https://api.euskadi.eus), que es también donde está la de Euskalmet) — agenda cultural completa, Semana Grande, Illumbe, Kursaal. Ojo: municipio **82** (NORA), coordenadas = centroide → tabla propia `venue → coords`, y **la API purga el pasado** → cosecha diaria.
-2. **TheSportsDB** (key `3`, Real Sociedad `idTeam 133724`) — partidos en Anoeta con hora local, filtrando `strVenue = "Reale Arena"`.
-3. **Scraper del Kursaal** (`/es/tipo/reuniones/`) — solo congresos, que no salen en Kulturklik.
+2. **Deporte y pruebas populares** ✅ implementado (`scripts/harvest_sports.py` → tabla `event`, con hora y coordenadas del recinto; cron diario). Kulturklik es agenda cultural: ni deporte, ni hora, ni recinto geolocalizado, y lo que más mueve la red es Anoeta lleno o la Behobia. Tres entradas: **openfootball** (GitHub, sin clave) para el calendario completo de Liga, con fechas provisionales hasta que LaLiga confirma; **TheSportsDB** (clave pública `3`; Real Sociedad `133724`, Gipuzkoa Basket `135084`) para el próximo y el último partido con hora confirmada —el calendario de temporada es de pago—, que pisan al provisional de su día; y `data/eventos-populares.csv` a mano (Behobia, regatas de la Concha, Clásica, maratón), que para cinco fechas al año es más fiable que cualquier scraper. Solo partidos en casa. En el timelapse salen en la agenda con hora y, mientras duran, como anillo ámbar sobre el recinto. La tabla `event` es, de paso, el `venue → coords` que pedía la Fase 0.
+3. **Scraper del Kursaal** (`/es/tipo/reuniones/`) — solo congresos, que no salen en Kulturklik. Pendiente.
 
 ```text
 evento → zona afectada → estaciones Dbizi cercanas → cambio de comportamiento

@@ -30,7 +30,7 @@ import json
 import math
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 M_DEG = 111320.0
@@ -102,7 +102,7 @@ def hora_de(e):
     return None
 
 
-def load_context(weather, holidays, events, frames):
+def load_context(weather, holidays, events, frames, events_db=None, center=None):
     """Lo que rodea a la marea: meteo horaria, tipo de día y eventos. Todo es
     opcional; la página funciona sin nada de esto."""
     ctx = {}
@@ -134,6 +134,28 @@ def load_context(weather, holidays, events, frames):
                            key=lambda e: (e["h"] or "99", e["type"], e["name"]))
             out[d] = {"n": len(cortos), "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1])[:4]), "items": items}
         ctx["events"] = out
+    # tabla event: deporte y pruebas populares, con hora y recinto geolocalizado.
+    # Van al día LOCAL (las 21:00 de un sábado son ese sábado, no el UTC).
+    if events_db and os.path.exists(events_db):
+        KIND = {"futbol": "Fútbol", "baloncesto": "Baloncesto", "carrera": "Carrera popular",
+                "regata": "Regata", "ciclismo": "Ciclismo"}
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Madrid")
+        lat0, lon0 = center or (None, None)
+        kx = M_DEG * math.cos(math.radians(lat0)) if lat0 else None
+        for r in csv.reader(open(events_db, encoding="utf-8")):
+            if len(r) < 8 or not r[2].strip(): continue
+            kind, name, st_, en_, venue, lat, lon, conf = r[:8]
+            start = datetime.fromisoformat(st_).replace(tzinfo=timezone.utc).astimezone(tz)
+            d = start.strftime("%Y-%m-%d")
+            if d not in days: continue
+            item = {"type": KIND.get(kind, kind), "name": name, "place": venue, "h": start.strftime("%H:%M"),
+                    "s": st_, "e": en_, "confirmed": conf.strip().lower() in ("t", "true", "1")}
+            if lat and lon and kx:
+                item["x"] = round((float(lon) - lon0) * kx); item["y"] = round((float(lat) - lat0) * M_DEG)
+            ev = ctx.setdefault("events", {}).setdefault(d, {"n": 0, "counts": {}, "items": []})
+            ev["n"] += 1; ev["counts"][item["type"]] = ev["counts"].get(item["type"], 0) + 1
+            ev["items"].insert(0, item)
     return ctx
 
 
@@ -156,6 +178,7 @@ def main():
     ap.add_argument("--weather", help="CSV ts,temp,mm,viento (horario) de la ventana; opcional")
     ap.add_argument("--holidays", help="CSV fecha,nombre; opcional")
     ap.add_argument("--events", help="cosecha de eventos (events_YYYYMMDD.json.gz); opcional")
+    ap.add_argument("--events-db", help="CSV de la tabla event (deporte y pruebas populares, con hora y sitio); opcional")
     a = ap.parse_args()
 
     geo = json.load(open(a.geo, encoding="utf-8"))
@@ -166,7 +189,7 @@ def main():
     data = {"center": list(center), "polys": geo["polys"],
             "stations": [{k: s[k] for k in ("id", "n", "x", "y", "c")} for s in st],
             "frames": frames,
-            "context": load_context(a.weather, a.holidays, a.events, frames)}
+            "context": load_context(a.weather, a.holidays, a.events, frames, a.events_db, center)}
     blob = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     span = (datetime.fromisoformat(frames[-1]["t"]) - datetime.fromisoformat(frames[0]["t"]))
     resumen = (f"{len(st)} estaciones, {len(frames)} frames de {a.minutes} min "

@@ -54,6 +54,7 @@ Están separados **a propósito**: en GCS los permisos públicos son a nivel de 
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
 | `weather.sh` | 04:45 del día 2 de cada mes | Euskalmet oficial, idempotente: **año anterior + actual** (suelo en 2026). Los meses ya cargados insertan 0; los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
+| `sports.sh` | 05:50 diario | openfootball + TheSportsDB + `data/eventos-populares.csv` → tabla `event` (upsert) | `~/sports.log` |
 | `openmeteo.sh` | cada 3 h (xx:40) | Últimos 7 días horarios → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
 
 **Los logs solo recogen errores**: los scripts callan cuando todo va bien, y por eso un log con contenido es señal de que algo pasó. Ojo con `gcloud`, que narra por **stderr**: los scripts que suben a GCS envuelven la llamada para capturarla y hablar solo si falla (`>/dev/null` no la calla y `2>/dev/null` se tragaría los errores de verdad). Verificado en las condiciones del cron: éxito 0 bytes, fallo con el `ERROR` íntegro.
@@ -78,6 +79,7 @@ El cron de visualización va a **minutos impares** para no coincidir con el coll
 | `weather_station` | `C017` (Miramón, pluviómetro oficial) y `OPENMETEO` (malla del mismo punto) | 2 filas |
 | `weather_measurement` | `C017` 10-min ene→jun 2026 · `OPENMETEO` horaria jul→hoy. Empalme sin hueco; el análisis prefiere C017 donde exista | 26.064 + 1.240 filas |
 | `holiday` | Festivos Donostia/Gipuzkoa a mano; añadir cada diciembre el siguiente | 15 filas (2026) |
+| `event` | Deporte (Real, GBC) y pruebas populares con hora y coordenadas; `confirmed=false` = fecha provisional de openfootball | 26 filas (2026-08-22) |
 
 Dos trampas del modelo, ambas documentadas en el propio `schema.sql`:
 
@@ -94,6 +96,10 @@ Dos trampas del modelo, ambas documentadas en el propio `schema.sql`:
 gcloud compute scp sql/schema.sql scripts/*.py scripts/*.sh \
   viz/donostia-barrios.json viz/donostia-dem.json viz/timelapse.tpl.html \
   dbizi-vm:~/ --zone=us-west1-a --configuration=dbizi
+gcloud compute scp data/eventos-populares.csv dbizi-vm:~/data/ --zone=us-west1-a --configuration=dbizi
+# harvest_sports.py busca el CSV en ROOT/data: en la VM, ROOT es ~ (sed al desplegar)
+gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi \
+  --command='sed -i "s|^ROOT = .*|ROOT = os.path.expanduser(\"~\")|" ~/harvest_sports.py'
 
 gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi --command='. ~/.dbizi.env
   sudo docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" dbizi-postgres-1 \

@@ -40,10 +40,17 @@ Q "SELECT to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'), temperatur
    ORDER BY ts;" > "$TMP/weather.csv"
 Q "SELECT date, name FROM holiday WHERE date BETWEEN current_date - 3 AND current_date + 1;" > "$TMP/holidays.csv"
 EVENTS=$(ls -1 ~/events/events_*.json.gz 2>/dev/null | tail -1)
+Q "SELECT kind, name, to_char(starts_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'),
+          to_char(coalesce(ends_at, starts_at + interval '2 hours') AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'),
+          venue, lat, lon, confirmed
+   FROM event
+   WHERE starts_at BETWEEN now() - interval '$VENTANA_H hours' - interval '1 day' AND now() + interval '1 day'
+   ORDER BY starts_at;" > "$TMP/events_db.csv"
 
 python3 ~/build_timelapse.py "$TMP/stations.csv" "$TMP/meas.csv" \
   --geo ~/donostia-barrios.json --tpl ~/timelapse.tpl.html --json-only "$TMP/data.json" \
-  --weather "$TMP/weather.csv" --holidays "$TMP/holidays.csv" ${EVENTS:+--events "$EVENTS"} > /dev/null
+  --weather "$TMP/weather.csv" --holidays "$TMP/holidays.csv" ${EVENTS:+--events "$EVENTS"} \
+  --events-db "$TMP/events_db.csv" > /dev/null
 
 # gzip local (no "in flight"): asi el OBJETO queda comprimido y se sirve con
 # content-encoding gzip. 75 KB pasan a 16 KB en el cable. Cache corta: el dato caduca rapido.

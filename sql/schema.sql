@@ -68,6 +68,24 @@ CREATE TABLE IF NOT EXISTS holiday (
     name text NOT NULL
 );
 
+-- Eventos con hora y sitio: deporte (Real Sociedad, Gipuzkoa Basket) y pruebas
+-- populares. Kulturklik sigue en ficheros (~/events/): no trae hora ni recinto
+-- geolocalizado. Esta tabla es, de paso, el "venue -> coords" de la Fase 0.
+CREATE TABLE IF NOT EXISTS event (
+    id           text PRIMARY KEY,          -- fuente:clave estable
+    source       text NOT NULL,             -- openfootball | thesportsdb | manual
+    kind         text NOT NULL,             -- futbol | baloncesto | carrera | regata | ciclismo
+    name         text NOT NULL,
+    starts_at    timestamptz NOT NULL,
+    ends_at      timestamptz,
+    venue        text,
+    lat          double precision,
+    lon          double precision,
+    confirmed    boolean NOT NULL DEFAULT true,  -- false: fecha/hora provisional
+    harvested_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS event_starts_at_idx ON event (starts_at);
+
 -- Migraciones idempotentes (no-op en BD nueva; migran la existente en la VM).
 ALTER TABLE dbizi_measurement   ADD COLUMN IF NOT EXISTS fetched_at       timestamptz;
 ALTER TABLE weather_measurement ADD COLUMN IF NOT EXISTS interval_minutes smallint;
