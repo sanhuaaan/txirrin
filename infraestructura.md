@@ -54,7 +54,7 @@ Están separados **a propósito**: en GCS los permisos públicos son a nivel de 
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
 | `weather.sh` | 04:45 del día 2 de cada mes | Euskalmet oficial, idempotente: **año anterior + actual** (suelo en 2026). Los meses ya cargados insertan 0; los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
-| `sports.sh` | 05:50 diario | openfootball + TheSportsDB + `data/eventos-populares.csv` → tabla `event` (upsert) | `~/sports.log` |
+| `sports.sh` | 05:50 diario | openfootball + TheSportsDB + reglas (Concha, Behobia) + `data/eventos-populares.csv` (Clásica, maratón) → tabla `event` (upsert) | `~/sports.log` |
 | `openmeteo.sh` | cada 3 h (xx:40) | Últimos 7 días horarios → `weather_measurement` (DO UPDATE: el modelo revisa) | `~/openmeteo.log` |
 
 **Los logs solo recogen errores**: los scripts callan cuando todo va bien, y por eso un log con contenido es señal de que algo pasó. Ojo con `gcloud`, que narra por **stderr**: los scripts que suben a GCS envuelven la llamada para capturarla y hablar solo si falla (`>/dev/null` no la calla y `2>/dev/null` se tragaría los errores de verdad). Verificado en las condiciones del cron: éxito 0 bytes, fallo con el `ERROR` íntegro.

@@ -1,6 +1,3 @@
 id,kind,name,date,time,venue,lat,lon,confirmed,nota
-concha-2026-1,regata,Bandera de la Concha (1ª jornada),2026-09-06,12:00,Bahía de la Concha,43.3185,-1.9905,true,primer domingo de septiembre
-concha-2026-2,regata,Bandera de la Concha (2ª jornada),2026-09-13,12:00,Bahía de la Concha,43.3185,-1.9905,true,segundo domingo de septiembre
-behobia-2026,carrera,Behobia - San Sebastián,2026-11-08,10:30,Boulevard (meta),43.3218,-1.9835,true,segundo domingo de noviembre; 30.000 corredores
-maraton-2026,carrera,Maratón Donostia - San Sebastián,2026-11-29,09:00,Anoeta / Boulevard,43.3014,-1.9735,false,último domingo de noviembre habitualmente; confirmar
-clasica-2026,ciclismo,Clásica San Sebastián,2026-08-01,11:00,Boulevard (meta),43.3218,-1.9835,false,sábado tras el Tour habitualmente; confirmar fecha
+clasica-2026,ciclismo,Clásica San Sebastián,2026-08-01,11:00,Boulevard (meta),43.3218,-1.9835,true,edición 2026
+maraton-2026,carrera,Maratón Donostia - San Sebastián,2026-11-22,09:00,Anoeta / Boulevard,43.3014,-1.9735,true,fecha oficial 2026

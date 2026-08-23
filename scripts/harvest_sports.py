@@ -11,8 +11,14 @@ las regatas) sale de aquí:
 - TheSportsDB (clave pública "3"): próximo y último partido de la Real y del
   Gipuzkoa Basket, con fecha y hora confirmadas. El calendario de temporada
   completo es de pago, por eso la combinación con openfootball.
-- data/eventos-populares.csv: Behobia, regatas de la Concha, Clásica, maratón.
-  Pocas al año y con fecha fija: una tabla a mano es más fiable que un scraper.
+- Reglas de calendario para lo que es fijo por reglamento: Bandera de la
+  Concha (primer y segundo domingo de septiembre) y Behobia-San Sebastián
+  (segundo domingo de noviembre). Se generan para el año en curso y el
+  siguiente sin mantenimiento.
+- data/eventos-populares.csv: lo que varía cada año (Clásica, maratón). No hay
+  fuente abierta estructurada: Kulturklik no tiene deporte, el CKAN de
+  Donostia no tiene agenda, Wikidata se queda en 2015/2025 sin fechas
+  exactas y las webs oficiales bloquean scrapers. Una línea al año, a mano.
 
 Solo partidos EN CASA. Idempotente (upsert por id). Cron diario.
 """
@@ -114,7 +120,22 @@ def main():
                              start, start + timedelta(hours=2), v[0], v[1], v[2], True))
                 n["thesportsdb"] += 1
 
-    # 3) pruebas populares, a mano
+    # 3a) pruebas populares con fecha reglamentaria: por regla, sin mantenimiento
+    def domingo_n(y, mes, n):
+        d = datetime(y, mes, 1, tzinfo=TZ)
+        d += timedelta(days=(6 - d.weekday()) % 7)
+        return d + timedelta(weeks=n - 1)
+    for y in (hoy.year, hoy.year + 1):
+        for n_, d in ((1, domingo_n(y, 9, 1)), (2, domingo_n(y, 9, 2))):
+            start = d.replace(hour=12)
+            upsert(cur, (f"manual:concha-{y}-{n_}", "regla", "regata", f"Bandera de la Concha ({n_}ª jornada)",
+                         start, start + timedelta(hours=3), "Bahía de la Concha", 43.3185, -1.9905, True))
+        start = domingo_n(y, 11, 2).replace(hour=10, minute=30)
+        upsert(cur, (f"manual:behobia-{y}", "regla", "carrera", "Behobia - San Sebastián",
+                     start, start + timedelta(hours=4), "Boulevard (meta)", 43.3218, -1.9835, True))
+        n["manual"] += 3
+
+    # 3b) lo que varía cada año, a mano
     with open(os.path.join(ROOT, "data", "eventos-populares.csv"), encoding="utf-8") as f:
         for r in csv.DictReader(f):
             h, mi = map(int, r["time"].split(":"))
