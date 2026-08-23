@@ -40,7 +40,7 @@ Estado a 2026-08-21. Coste: **0 €/mes**.
 
 | Bucket | Acceso | Contiene | Caducidad |
 |--------|--------|----------|-----------|
-| `cosas-con-datos-en-dbizi-backup` | **privado** | `dumps/`, `raw/`, `events/` | solo `dumps/`, 7 días |
+| `cosas-con-datos-en-dbizi-backup` | **privado** | `dumps/`, `raw/YYYYMMDD.tar.xz` (un objeto por día), `events/` | solo `dumps/`, 7 días |
 | `cosas-con-datos-en-dbizi-viz` | **público** | `index.html`, `data.json` | ninguna (se sobrescriben) |
 
 Están separados **a propósito**: en GCS los permisos públicos son a nivel de bucket, así que publicar la web desde el de backups habría hecho públicos los dumps de la base de datos. La regla de caducidad va acotada con `matchesPrefix: ["dumps/"]` — sin ese acote se llevaría por delante el crudo, que es irrecuperable. Ninguno tiene versionado, así que sobrescribir `data.json` no acumula copias.
@@ -49,9 +49,10 @@ Están separados **a propósito**: en GCS los permisos públicos son a nivel de 
 
 | Cron | Cuándo (UTC) | Qué hace | Log |
 |------|--------------|----------|-----|
-| `collect.sh` | cada 2 min | GBFS → `dbizi_measurement` + crudo gzip a `~/raw/` (`station_information` 1×/día). Valida el feed antes de archivar y escribe de forma atómica | `~/collect.log` |
+| `collect.sh` | cada 2 min | GBFS → `dbizi_measurement` + crudo gzip a `~/raw/` (`station_information` 1×/día). Escribe de forma atómica y **archiva siempre**: si el feed no valida lo guarda como `.bad` y falla después, así un cambio de esquema en PBSC no abre un hueco irrecuperable | `~/collect.log` |
+| `raw_upload.sh` | cada hora (`:05`) | `pack_raw.py` empaqueta hoy y ayer en `~/raw/YYYYMMDD.tar.xz` (JSON descomprimido + xz nivel 1: 0,36 MB/día frente a 1,09 sueltos) y los sube a `raw/` (1 objeto/día, sobreescrito; 48 operaciones/día, dentro de la capa gratuita). Borra el crudo local de más de 30 días | `~/raw_upload.log` |
 | `publish_viz.sh` | cada 5 min (`:02`, `:07`…) | Regenera el JSON del timelapse (24 h) → bucket público | `~/viz.log` |
-| `backup.sh` | 04:10 diario | `pg_dump -Fc` → `dumps/` + crudo de ayer → `raw/` + `~/events` → `events/` | `~/backup.log` |
+| `backup.sh` | 04:10 diario | `pg_dump -Fc` → `dumps/` + `~/events` → `events/` (el crudo ya no va aquí) | `~/backup.log` |
 | `weather.sh` | 04:45 del día 2 de cada mes | Euskalmet oficial, idempotente: **año anterior + actual** (suelo en 2026). Los meses ya cargados insertan 0; los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
 | `sports.sh` | 05:50 diario | openfootball + TheSportsDB + reglas (Concha, Behobia) + `data/eventos-populares.csv` (Clásica, maratón) → tabla `event` (upsert) | `~/sports.log` |
@@ -158,7 +159,7 @@ Dead man's switch en [healthchecks.io](https://healthchecks.io) (plan gratuito):
   2. Recrear `~/.dbizi.env`: `POSTGRES_PASSWORD`, `HC_COLLECT`, `HC_BACKUP` (las dos últimas, del panel de healthchecks.io).
   3. Copiar fuentes con el bloque de **Despliegue** y lanzar `schema.sql` y `holidays.sql`.
   4. `gcloud storage cp gs://…/dumps/<último>.dump . && pg_restore -U dbizi -d dbizi --data-only <dump>`
-  5. `gcloud storage rsync -r gs://…/raw ~/raw` (y `events/` igual), luego `~/ingest_raw.sh` para tapar lo que el dump no alcance.
+  5. `gcloud storage cp gs://…/raw/*.tar.xz ~/raw/` (y `events/` con rsync), luego `~/ingest_raw.sh` para tapar lo que el dump no alcance: lee los tars directamente, sin desempaquetar (ensayado el 2026-08-23 con el día 21: 35 560 filas, idempotente).
   6. Reinstalar los crons de la tabla de arriba.
   7. El hueco de Dbizi entre dump y presente solo se recupera si estaba en `raw/`; la meteo sí se rehace con `openmeteo.sh` y `weather.sh`.
 - ⚠️ **La restauración nunca se ha ensayado de punta a punta.**
@@ -185,11 +186,13 @@ Credenciales BD: `/opt/dbizi/.env` (root, 600) y `~/.dbizi.env` (usuario, para c
 
 ## Riesgos asumidos
 
-- **La VM es el único punto de captura**: si muere, se pierde lo que no llegara al último backup.
+- **La VM es el único punto de captura**: si muere, se pierde lo que no llegara a la última subida horaria del crudo (hasta 1 h de capturas, antes hasta 24 h). Lo que no se captura no se recupera nunca: Dbizi no tiene histórico.
+- **El bucket es la copia de verdad y vive en una sola cuenta de Google** (sin versionado, *soft delete* 7 días). Pendiente: copia mensual fuera de Google desde un PC (`gcloud storage rsync gs://…/raw ~/txirrin-raw`, ~130 MB/año).
+- **Operaciones de GCS**: el crudo suelto eran 21 000 subidas/mes, cuatro veces la capa gratuita (5 000), ~5 céntimos. Desde el 2026-08-23 va en un tar por día (48 ops/día): dentro de la capa gratuita.
 - **Free tier**: e2-micro en región US, disco *standard*, una VM. Vigilar el primer email de la alerta por el posible cargo de IPv4 (~3 €/mes); si aparece, reevaluar (Hetzner 4 €/mes, 4 GB).
 - **La web del timelapse es pública sin autenticación**: cualquiera con la URL entra. Hoy da igual —el dato de Dbizi ya es público— pero condiciona lo que se pueda poner ahí.
 - **Meteo oficial con ~2 meses de retraso** (verificado: en agosto lo último publicado era junio): mitigado con Open-Meteo, que es reanálisis, no pluviómetro. La API en tiempo real de Euskalmet sigue pendiente porque su portal no envía el correo de confirmación; si algún día llega la key, añadir puller oficial y degradar Open-Meteo a respaldo.
-- **Restauración sin ensayar.**
+- **Restauración ensayada solo a medias**: la reingesta desde tar sí (2026-08-23); el dump, no.
 
 ## Historial de decisiones (condensado)
 

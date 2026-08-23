@@ -24,15 +24,19 @@ DSN = os.environ["DBIZI_DSN"]
 
 
 def fetch(feed):
-    """Devuelve (crudo, parseado). Valida antes de archivar: un 200 vacío o una página
-    de error se comprimen igual de bien que un feed bueno (28 bytes de gzip válido)."""
+    """Devuelve (crudo, parseado o None, válido). NO lanza si el feed no valida:
+    el crudo se archiva igual (con sufijo .bad) y es el llamador quien falla.
+    Si PBSC cambia el esquema o la URL, lo que no se capture no se recupera
+    nunca; con el crudo guardado, el parser se arregla después y se reingesta."""
     req = urllib.request.Request(BASE + feed, headers={"User-Agent": "dbizi-collector"})
     with urllib.request.urlopen(req, timeout=30) as r:
         payload = r.read()
-    data = json.loads(payload)
-    if not data.get("data", {}).get("stations"):
-        raise ValueError(f"{feed}: respuesta sin data.stations ({len(payload)} bytes)")
-    return payload, data
+    try:
+        data = json.loads(payload)
+        ok = bool(data.get("data", {}).get("stations"))
+    except ValueError:
+        data, ok = None, False
+    return payload, data, ok
 
 
 def save_raw(now, name, payload):
@@ -51,14 +55,18 @@ def save_raw(now, name, payload):
 
 def main():
     now = datetime.now(timezone.utc)
-    status_raw, status = fetch("station_status")
-    day_dir = save_raw(now, "status", status_raw)
+    status_raw, status, ok = fetch("station_status")
+    day_dir = save_raw(now, "status" if ok else "status.bad", status_raw)
+    if not ok:
+        raise ValueError(f"station_status: respuesta sin data.stations ({len(status_raw)} bytes); crudo guardado como .bad")
 
     conn = psycopg2.connect(DSN)
     cur = conn.cursor()
     if not any(f.endswith("_info.json.gz") for f in os.listdir(day_dir)):
-        info_raw, info = fetch("station_information")
-        save_raw(now, "info", info_raw)
+        info_raw, info, ok = fetch("station_information")
+        save_raw(now, "info" if ok else "info.bad", info_raw)
+        if not ok:
+            raise ValueError(f"station_information: respuesta sin data.stations; crudo guardado como .bad")
         insert_stations(cur, info)
     insert_status(cur, status, fetched_at=now)
     conn.commit()

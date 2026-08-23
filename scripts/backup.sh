@@ -1,6 +1,8 @@
 #!/bin/bash
 # Backup diario a GCS: dump de la BD (retención 7 días por lifecycle del bucket)
-# + crudo del día anterior (inmutable, se conserva siempre). Cron: 04:10 UTC.
+# + cosecha de eventos. El crudo de Dbizi ya no va aquí: lo sube raw_upload.sh
+# cada hora, empaquetado por día (un objeto/día, dentro de la capa gratuita de
+# operaciones de GCS). Cron: 04:10 UTC.
 set -euo pipefail
 . ~/.dbizi.env   # credenciales + HC_BACKUP (ping de healthchecks.io)
 
@@ -19,11 +21,6 @@ sudo docker compose -f /opt/dbizi/docker-compose.yml exec -T postgres \
   pg_dump -U dbizi -Fc dbizi > "/tmp/dbizi_$STAMP.dump"
 gcs cp -q "/tmp/dbizi_$STAMP.dump" "$BUCKET/dumps/"
 rm "/tmp/dbizi_$STAMP.dump"
-
-YESTERDAY=$(date -u -d yesterday +%Y%m%d)
-if [ -d "$HOME/raw/$YESTERDAY" ]; then
-    gcs rsync -q -r "$HOME/raw/$YESTERDAY" "$BUCKET/raw/$YESTERDAY"
-fi
 
 if [ -d "$HOME/events" ]; then
     gcs rsync -q -r "$HOME/events" "$BUCKET/events"

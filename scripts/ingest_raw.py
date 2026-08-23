@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Reingesta el crudo de disco (~/raw/YYYYMMDD/*.json.gz) a Postgres.
+"""Reingesta el crudo a Postgres, desde ~/raw/YYYYMMDD/*.json.gz o desde los
+~/raw/YYYYMMDD.tar.xz que sube raw_upload.sh al bucket (para restaurar: bajar
+los tars a ~/raw y ejecutar esto). Los .bad (crudo que no validó) se saltan.
 
 collect.py guarda el crudo ANTES de tocar la BD, así que un fallo de Postgres
 (VM saturada, contenedor caído) deja el tick en disco pero no en la tabla.
@@ -16,6 +18,7 @@ import gzip
 import json
 import os
 import sys
+import tarfile
 from datetime import datetime, timezone
 
 import psycopg2
@@ -37,15 +40,29 @@ def read_gz(path):
         return json.loads(f.read())
 
 
-def process_day(cur, day):
+def snapshots(day):
+    """Itera (nombre, json) de un día, venga en directorio o en tar.gz.
+    El directorio manda si existe (es lo más reciente)."""
     day_dir = os.path.join(RAW, day)
+    tar_path = next((p for p in (os.path.join(RAW, day + ext) for ext in (".tar.xz", ".tar.gz")) if os.path.isfile(p)), None)
+    if os.path.isdir(day_dir):
+        for fname in sorted(os.listdir(day_dir)):
+            if fname.endswith(".json.gz"):
+                yield fname, lambda p=os.path.join(day_dir, fname): read_gz(p)
+    elif tar_path:
+        with tarfile.open(tar_path, "r:*") as tar:
+            for m in sorted(tar.getmembers(), key=lambda m: m.name):
+                if m.isfile() and m.name.endswith(".json"):
+                    yield os.path.basename(m.name) + ".gz", lambda m=m, t=tar: json.loads(t.extractfile(m).read())
+
+
+def process_day(cur, day):
     inserted = backfilled = skipped = 0
-    for fname in sorted(os.listdir(day_dir)):
-        if not fname.endswith(".json.gz"):
-            continue
-        path = os.path.join(day_dir, fname)
+    for fname, read in snapshots(day):
+        if ".bad." in fname:
+            continue                                  # el feed no validó: no hay qué ingerir
         try:
-            feed = read_gz(path)
+            feed = read()
         except (OSError, ValueError, EOFError) as e:  # truncado por un corte a mitad de escritura
             # gzip lanza EOFError si falta el marcador de fin y BadGzipFile (OSError) si el magic no cuadra
             print(f"  ! ilegible, se salta: {fname} ({e})", file=sys.stderr)
@@ -69,7 +86,7 @@ def process_day(cur, day):
 def main():
     if not os.path.isdir(RAW):
         sys.exit(f"no existe {RAW}")
-    days = sys.argv[1:] or sorted(d for d in os.listdir(RAW) if d.isdigit())
+    days = sys.argv[1:] or sorted({d[:8] for d in os.listdir(RAW) if d[:8].isdigit() and (len(d) == 8 or ".tar." in d)})
     if not days:
         print("sin días que procesar")
         return
