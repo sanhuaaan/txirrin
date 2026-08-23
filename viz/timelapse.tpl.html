@@ -488,7 +488,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   // La huella del fallo: minutos "de calor" por estación y frame. Mientras
   // la estación está sin bicis (o sin anclajes) el contador sube minuto a
   // minuto: el disco crece y se enciende. Cuando recupera, baja con una
-  // constante de tiempo que se acorta cuantas más bicis tenga (o más
+  // constante de tiempo que se acorta con la raíz de las bicis que tenga (o
   // anclajes libres, para la llena): recuperar con 1 bici es precario y la
   // huella tarda en irse; con 10, se borra en poco rato. Cerrada: no suma ni
   // resta. Se recalcula al refrescar, 300x70 operaciones.
@@ -502,8 +502,9 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
         const op = isOpen(F[f - 1], i), cap = S[i].c || 1, nb = b[i], free = Math.max(0, cap - nb);
         const e = cumE[(f - 1) * N + i], fu = cumF[(f - 1) * N + i];
         if (!op) { cumE[f * N + i] = e; cumF[f * N + i] = fu; continue; }
-        cumE[f * N + i] = nb <= 0 ? e + dt : e * Math.exp(-dt * Math.max(1, nb) / OLVIDO);
-        cumF[f * N + i] = nb >= cap ? fu + dt : fu * Math.exp(-dt * Math.max(1, free) / OLVIDO);
+        // raíz de las bicis: 10 bicis borran 3 veces más rápido que 1, no 10
+        cumE[f * N + i] = nb <= 0 ? e + dt : e * Math.exp(-dt * Math.sqrt(Math.max(1, nb)) / OLVIDO);
+        cumF[f * N + i] = nb >= cap ? fu + dt : fu * Math.exp(-dt * Math.sqrt(Math.max(1, free)) / OLVIDO);
       }
     }
   }
