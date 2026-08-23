@@ -148,7 +148,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
     <div id="time">--:--</div>
     <div id="day">&nbsp;</div>
     <div id="wx" hidden></div>
-    <div id="shut" hidden>servicio cerrado</div>
+    <div id="shut" hidden>servicio cerrado · abre a las 06:00</div>
   </div>
 </div>
 
@@ -157,7 +157,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
-  <div class="stat"><span class="k"><span class="dot" style="background:#5a626c"></span>Cerradas</span><span class="v" id="s-clo">—<small>/70</small></span></div>
+  <div class="stat"><span class="k"><span class="dot" style="background:#e6c56b"></span>Cerradas</span><span class="v" id="s-clo">—<small>/70</small></span></div>
   <button id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5.5 1.5v3M10.5 1.5v3"/></svg>
     <span>Ver agenda del día</span><span class="n" id="ev-n">—</span>
@@ -383,7 +383,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                evc: document.getElementById("ev-counts"), evl: document.getElementById("ev-list"),
                strip: document.getElementById("strip"), clo: document.getElementById("s-clo"),
                shut: document.getElementById("shut") };
-  const CLOSED = hex("#3d434b");                // cerrada o averiada: gris, fuera de la rampa
+  const CLOSED = hex("#c9a94f");                // cerrada o averiada: ámbar, fuera de la rampa
   const isOpen = (fr, i) => !fr.o || fr.o[i] === "1";
   let CTX = DATA.context || {};
   const fISO = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -694,7 +694,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       }
       placed.push([X, Y, w]);
       ctx.lineWidth = 3; ctx.strokeStyle = "rgba(12,17,22,.85)"; ctx.strokeText(txt, X, Y);
-      ctx.fillStyle = full === "closed" ? "#9aa3ad" : full ? "#9cc6ff" : "#ffb3b3"; ctx.fillText(txt, X, Y);
+      ctx.fillStyle = full === "closed" ? "#f0d47a" : full ? "#9cc6ff" : "#ffb3b3"; ctx.fillText(txt, X, Y);
     }
 
     compass();
@@ -766,7 +766,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     if (full) {                                 // llena: tapa con borde encendido
       ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = 1.6; ctx.stroke();
     } else if (closed) {                        // cerrada: tapa discontinua
-      ctx.setLineDash([3, 2]); ctx.strokeStyle = "#8c96a2"; ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([]);
+      ctx.setLineDash([3, 2]); ctx.strokeStyle = "#ffe08a"; ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([]);
     }
   }
   // Huella: disco en el suelo que crece con las horas de fallo acumuladas en
@@ -796,7 +796,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   }
   function emptyMark(s, half, closed) {         // vacía: la ausencia también se dibuja
     const c = iso(s.x, s.y, s.z + 2);
-    ctx.strokeStyle = closed ? "#8c96a2" : "#e66767"; ctx.lineWidth = 1.6;
+    ctx.strokeStyle = closed ? "#e6c56b" : "#e66767"; ctx.lineWidth = 1.6;
     if (closed) ctx.setLineDash([2, 2]);
     ctx.beginPath(); ctx.arc(sx(c), sy(c), 3.6, 0, 6.284); ctx.stroke(); ctx.setLineDash([]);
   }
