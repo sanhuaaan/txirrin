@@ -6,10 +6,13 @@ se pintaban igual. Aquí se bajan los polígonos de OSM con una clase (1 hierba/
 parque/cultivo, 2 bosque/matorral, 3 urbano), se simplifican y se guardan como
 vectores `cover` ([clase, anillo]) en viz/donostia-dem.json, junto con los
 viales (motorway/trunk/primary) como polilíneas `roads`, en metros locales.
+Una segunda consulta baja las calles secundarias/terciarias (`roads2`), las vías
+de tren (`rail`) y la huella de los edificios grandes (`buildings`, ≥ 1200 m²,
+de los 8000 que hay: los pequeños no se verían y pesarían 2 MB).
 (Se probó rasterizar por celda del DEM y salía a bloques, el mismo defecto que
 el pixel art que se descartó.) Se ejecuta una vez.
 """
-import json, math, os, sys, urllib.parse, urllib.request
+import json, math, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GEO = os.path.join(ROOT, "viz", "donostia-barrios.json")
@@ -21,10 +24,15 @@ Q = ('[out:json][timeout:120];('
      'wr["natural"~"^(wood|scrub|heath|grassland)$"]({b});'
      'wr["leisure"~"^(park|garden|pitch|golf_course)$"]({b});'
      'way["highway"~"^(motorway|trunk|primary)$"]({b}););out geom;')
+Q2 = ('[out:json][timeout:180];('
+      'way["highway"~"^(secondary|tertiary)$"]({b});'
+      'way["railway"="rail"]({b});'
+      'way["building"]({b}););out geom;')
 URBAN = {"residential", "industrial", "commercial", "retail", "railway"}
 GREEN = {"grass", "meadow", "farmland", "orchard", "cemetery", "recreation_ground",
          "grassland", "park", "garden", "pitch", "golf_course"}
 WOOD = {"forest", "wood", "scrub", "heath"}
+MIN_BUILDING = 1200                       # m2
 TOL = 18                                  # m, Douglas-Peucker
 MIN_AREA = {1: 4000, 2: 10000, 3: 10000}  # m2: no vale la pena pintarlo
 
@@ -55,15 +63,27 @@ def clip(r, x0, y0, x1, y1):            # Sutherland-Hodgman al rectángulo de l
     return r
 
 
+MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
+
+
+def overpass(q):                        # el servidor principal satura a menudo: reintento y espejo
+    for n in range(6):
+        url = MIRRORS[n % len(MIRRORS)] + "?data=" + urllib.parse.quote(q)
+        req = urllib.request.Request(url, headers={"User-Agent": "txirrin (github sanhuaaan)"})
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r: return json.load(r)["elements"]
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+            print(f"overpass: {e}; reintento", file=sys.stderr); time.sleep(20)
+    raise SystemExit("overpass no responde")
+
+
 def main():
     geo = json.load(open(GEO, encoding="utf-8")); lat0, lon0 = geo["center"]
     d = json.load(open(DEM)); x0, y0, st, nx, ny = d["x0"], d["y0"], d["step"], d["nx"], d["ny"]
     x1, y1 = x0 + (nx - 1) * st, y0 + (ny - 1) * st
     kx = M_DEG * math.cos(math.radians(lat0))
     bbox = f"{lat0 + y0/M_DEG:.5f},{lon0 + x0/kx:.5f},{lat0 + y1/M_DEG:.5f},{lon0 + x1/kx:.5f}"
-    url = "https://overpass-api.de/api/interpreter?data=" + urllib.parse.quote(Q.format(b=bbox))
-    req = urllib.request.Request(url, headers={"User-Agent": "txirrin (github sanhuaaan)"})
-    with urllib.request.urlopen(req, timeout=180) as r: els = json.load(r)["elements"]
+    els = overpass(Q.format(b=bbox))
     loc = lambda g: ((g["lon"] - lon0) * kx, (g["lat"] - lat0) * M_DEG)
     cell = lambda p: ((p[0] - x0) / st, (p[1] - y0) / st)      # coordenadas de celda
     CW, CH = nx - 1, ny - 1
@@ -102,12 +122,36 @@ def main():
             m = len(r) // 2
             rr = dp(r[:m + 1], TOL)[:-1] + dp(r[m:], TOL)
             if len(rr) >= 3: cover.append([k, [list(p) for p in rr]])
+    # segunda consulta: calles, tren y edificios
+    els2 = overpass(Q2.format(b=bbox))
+    roads2, rail, buildings = [], [], []
+    def lines(e, out, tol):
+        pts = [(round(x), round(y)) for x, y in (loc(g) for g in e["geometry"])]
+        run = []
+        for p in pts:
+            if inside(p): run.append(p)
+            elif len(run) > 1: out.append(dp(run, tol)); run = []
+            else: run = []
+        if len(run) > 1: out.append(dp(run, tol))
+    for e in els2:
+        t = e.get("tags", {})
+        if "building" in t:
+            r = [(round(x), round(y)) for x, y in clip([loc(g) for g in e["geometry"]], x0, y0, x1, y1)]
+            if len(r) < 4 or area(r) < MIN_BUILDING: continue
+            m = len(r) // 2
+            rr = dp(r[:m + 1], 4)[:-1] + dp(r[m:], 4)
+            if len(rr) >= 3: buildings.append([list(p) for p in rr])
+        elif "railway" in t: lines(e, rail, 15)
+        else: lines(e, roads2, 15)
+    d["roads2"], d["rail"], d["buildings"] = roads2, rail, buildings
     d.pop("lc", None)
     d["cover"], d["roads"] = cover, roads
     d["note"] = d["note"].split("; lc/roads")[0].split("; cover/roads")[0] + "; cover/roads: cobertura del suelo y viales desde OSM (scripts/fetch_landcover.py)"
     json.dump(d, open(DEM, "w"), separators=(",", ":"))
     print(f"{len(els)} elementos; polígonos: " + ", ".join(f"{k}={sum(1 for c in cover if c[0]==k)}" for k in (1,2,3))
-          + f" ({sum(len(c[1]) for c in cover)} pts); {len(roads)} tramos de vial ({sum(len(r) for r in roads)} pts)", file=sys.stderr)
+          + f" ({sum(len(c[1]) for c in cover)} pts); {len(roads)} tramos de vial ({sum(len(r) for r in roads)} pts); "
+          f"{len(roads2)} calles ({sum(len(r) for r in roads2)} pts); {len(rail)} tramos de vía; "
+          f"{len(buildings)} edificios ({sum(len(b) for b in buildings)} pts)", file=sys.stderr)
 
 
 if __name__ == "__main__":

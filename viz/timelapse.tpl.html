@@ -602,16 +602,21 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       g.closePath(); g.stroke();
     }
 
-    // viales principales, un hilo claro drapeado: dan la trama de la ciudad
-    g.lineWidth = Math.max(0.8, 1.1 * Math.min(2, zoom)); g.strokeStyle = "rgba(210,205,195,.22)"; g.lineJoin = "round";
-    for (const r of DEM.roads || []) {
-      g.beginPath();
-      for (let i = 0; i < r.length; i++) {
-        const q = iso(r[i][0], r[i][1], hAt(r[i][0], r[i][1]) + 3);
-        i ? g.lineTo(px_(q), py_(q)) : g.moveTo(px_(q), py_(q));
-      }
-      g.stroke();
+    // la trama de la ciudad, drapeada: edificios grandes como manchas un
+    // punto más claras que el suelo urbano, calles como hilo tenue, viales
+    // principales algo más vivos, tren a trazos. En grueso (arrastrando) solo
+    // los viales: lo demás es detalle y no hace falta para orientarse.
+    const lines = (arr, dz) => { for (const r of arr) { drape(r, false); g.stroke(); } };
+    if (!coarse) {
+      g.fillStyle = "rgba(150,142,140,.16)"; g.strokeStyle = "rgba(10,14,18,.35)"; g.lineWidth = 0.6;
+      for (const b of DEM.buildings || []) { drape(b, true); g.fill(); g.stroke(); }
+      g.lineWidth = Math.max(0.5, 0.6 * Math.min(2, zoom)); g.strokeStyle = "rgba(210,205,195,.11)"; g.lineJoin = "round";
+      lines(DEM.roads2 || []);
     }
+    g.lineWidth = Math.max(0.8, 1.1 * Math.min(2, zoom)); g.strokeStyle = "rgba(210,205,195,.22)"; g.lineJoin = "round";
+    lines(DEM.roads || []);
+    g.setLineDash([4, 3]); g.lineWidth = 1; g.strokeStyle = "rgba(190,190,200,.18)";
+    lines(DEM.rail || []); g.setLineDash([]);
 
     // El mar, vectorial: el contorno de las celdas de mar suavizado. Celda a
     // celda la costa salía en escalera. El terreno bajo el mar está a cota 0
