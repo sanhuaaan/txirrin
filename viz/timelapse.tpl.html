@@ -483,22 +483,25 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
 
   // bicis por estación en `pos`, interpolando entre frames para que crezcan suave
   const bikes = new Float32Array(N);
-  // Minutos sin bicis / sin anclajes por estación hasta cada frame, con
-  // olvido: la huella del fallo. Cada minuto que pasa sin fallo la resta se
-  // come una parte (vida media ~1 h), así una estación que se vació de
-  // madrugada y ya va equilibrada no sigue en rojo a mediodía; un fallo que
-  // dura deja un círculo grande. Se recalcula al refrescar, 300x70 sumas.
+  // La huella del fallo: minutos "de calor" por estación y frame. Mientras
+  // la estación está sin bicis (o sin anclajes) el contador sube minuto a
+  // minuto: el disco crece y se enciende. Cuando recupera, baja con una
+  // constante de tiempo que se acorta cuantas más bicis tenga (o más
+  // anclajes libres, para la llena): recuperar con 1 bici es precario y la
+  // huella tarda en irse; con 10, se borra en poco rato. Cerrada: no suma ni
+  // resta. Se recalcula al refrescar, 300x70 operaciones.
   let cumE, cumF;
-  const OLVIDO = 90;                            // minutos: constante de tiempo
+  const OLVIDO = 150;                           // min: constante de tiempo al recuperar con 1 bici (o 1 anclaje)
   function accumulate() {
     cumE = new Float32Array(NF * N); cumF = new Float32Array(NF * N);
     for (let f = 1; f < NF; f++) {
       const b = F[f - 1].b, dt = (new Date(F[f].t + "Z") - new Date(F[f - 1].t + "Z")) / 6e4;
-      const keep = Math.exp(-dt / OLVIDO);
       for (let i = 0; i < N; i++) {
-        const op = isOpen(F[f - 1], i);         // cerrada no es vacía ni llena: no deja huella
-        cumE[f * N + i] = cumE[(f - 1) * N + i] * keep + (op && b[i] <= 0 ? dt : 0);
-        cumF[f * N + i] = cumF[(f - 1) * N + i] * keep + (op && b[i] >= (S[i].c || 1) ? dt : 0);
+        const op = isOpen(F[f - 1], i), cap = S[i].c || 1, nb = b[i], free = Math.max(0, cap - nb);
+        const e = cumE[(f - 1) * N + i], fu = cumF[(f - 1) * N + i];
+        if (!op) { cumE[f * N + i] = e; cumF[f * N + i] = fu; continue; }
+        cumE[f * N + i] = nb <= 0 ? e + dt : e * Math.exp(-dt * Math.max(1, nb) / OLVIDO);
+        cumF[f * N + i] = nb >= cap ? fu + dt : fu * Math.exp(-dt * Math.max(1, free) / OLVIDO);
       }
     }
   }
@@ -871,13 +874,15 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   // la ventana. Al final del día se ve dónde duele sin mover el reproductor.
   function footprint(s, mins, col) {
     if (mins < 8) return;
-    const r = Math.min(300, 50 + 75 * Math.sqrt(mins / 60));   // 1 h: 125 m, techo 300 m (con olvido, ~1,5 h seguidas)
+    const h = mins / 60;
+    const r = Math.min(300, 50 + 75 * Math.sqrt(h));     // 1 h: 125 m, 4 h: 200 m, techo 300 m
+    const alpha = 0.07 + 0.18 * Math.min(1, h / 4);        // se enciende hasta las 4 h
     ctx.beginPath();
     for (let a = 0; a < 24; a++) {
       const q = iso(s.x + r * Math.cos(a * .2618), s.y + r * Math.sin(a * .2618), s.z + 1);
       a ? ctx.lineTo(sx(q), sy(q)) : ctx.moveTo(sx(q), sy(q));
     }
-    ctx.closePath(); ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},.15)`; ctx.fill();
+    ctx.closePath(); ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha.toFixed(3)})`; ctx.fill();
   }
   // Sombra en la base, hacia abajo-derecha (la luz viene de arriba-izquierda):
   // ancla la columna al terreno; sin ella las altas parecen flotar.
