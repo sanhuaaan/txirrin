@@ -51,6 +51,8 @@ Además, la Fase 0 (ver [`fase-0-fuentes.md`](fase-0-fuentes.md)) confirmó que 
 https://sansebastian.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json
 ```
 
+**De dónde sale esta URL.** No es una API escondida: es **GBFS** (*General Bikeshare Feed Specification*), el estándar abierto que mantiene [MobilityData](https://gbfs.org) (nacido en la North American Bikeshare Association en 2015) y que casi todos los sistemas de bici pública publican para que Google Maps, Citymapper o Transit muestren las bicis disponibles. Por diseño es público y sin clave. Dbizi lo opera PBSC Urban Solutions (hoy parte de Lyft), y PBSC sirve el GBFS de todos sus sistemas con el mismo patrón de dominio, `<ciudad>.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json`, igual que Barcelona, Montreal o Buenos Aires; `gbfs.json` es el índice que lista los demás feeds. Está listado en el [catálogo oficial de sistemas GBFS](https://github.com/MobilityData/gbfs/blob/master/systems.csv) (`systems.csv`, una fila por ciudad) y enlazado desde Open Data Euskadi como dato abierto de movilidad.
+
 - `station_information`: **70 estaciones** con lat/lon, dirección, capacidad.
 - `station_status`: bicis y anclajes disponibles, estado (`is_renting`, `is_returning`), `last_reported` en segundos, **desglose mecánica vs. eléctrica** (`vehicle_types_available`).
 - TTL 21–30 s → tiempo casi real.
@@ -76,6 +78,7 @@ Principal fuente externa para explicar cambios de comportamiento. Variables: pre
 
 - **Histórico**: zips anuales gratuitos, granularidad **10 min**, desde 2003.
 - **Tiempo real**: API `api.euskadi.eus/euskalmet` con key gratuita (JWT RS256); sandbox sin auth para desarrollar.
+- **Complemento en marcha**: [Open-Meteo](https://open-meteo.com) (`api.open-meteo.com`, API documentada, gratuita y sin clave para uso no comercial), horaria, para cubrir el desfase de ~2 meses con que Open Data Euskadi publica los XML mensuales de Euskalmet. Es la que alimenta la meteo del timelapse.
 - **Matiz clave**: la única estación de Donostia con **precipitación es C017 Miramón** (43.2868, -1.97121). Santa Clara (C007) apoya con viento/temperatura. Para una ciudad de este tamaño, basta para el MVP.
 
 Relación espacial estación Dbizi → estación meteo más cercana vía PostGIS (con una sola estación de lluvia, trivial de inicio).
@@ -90,7 +93,7 @@ Variable fundamental para distinguir comportamiento normal: día de la semana, l
 
 Una de las fuentes más interesantes para explicar anomalías. Cubierta con (detalle en el anexo de [`fase-0-fuentes.md`](fase-0-fuentes.md)):
 
-1. **API Kulturklik** (`api.euskadi.eus/culture/events/v1.0/events/byMonth/{y}/{m}/byMunicipality/20/82`, sin key) — agenda cultural completa, Semana Grande, Illumbe, Kursaal. Ojo: municipio **82** (NORA), coordenadas = centroide → tabla propia `venue → coords`, y **la API purga el pasado** → cosecha diaria.
+1. **API Kulturklik** (`api.euskadi.eus/culture/events/v1.0/events/byMonth/{y}/{m}/byMunicipality/20/82`, sin key; publicada en el [portal de APIs del Gobierno Vasco](https://api.euskadi.eus), que es también donde está la de Euskalmet) — agenda cultural completa, Semana Grande, Illumbe, Kursaal. Ojo: municipio **82** (NORA), coordenadas = centroide → tabla propia `venue → coords`, y **la API purga el pasado** → cosecha diaria.
 2. **TheSportsDB** (key `3`, Real Sociedad `idTeam 133724`) — partidos en Anoeta con hora local, filtrando `strVenue = "Reale Arena"`.
 3. **Scraper del Kursaal** (`/es/tipo/reuniones/`) — solo congresos, que no salen en Kulturklik.
 
