@@ -929,7 +929,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                  : r < .25 ? "casi vacía" : r > .75 ? "casi llena" : "equilibrada";
     const fd = F[Math.min(NF - 1, Math.floor(pos))].d, nd = fd ? fd[hover] : 0;
     el.tip.innerHTML = '<div class="n">' + s.n + '</div><div class="d">' +
-      v + " / " + cap + " bicis · " + estado + (nd ? " + " + nd + (nd > 1 ? " averiadas" : " averiada") : "") + "</div>";
+      v + " / " + cap + " bicis" + (nd ? " (+ " + nd + (nd > 1 ? " averiadas)" : " averiada)") : "") + " · " + estado + "</div>";
     el.tip.style.left = mx + "px";
     el.tip.style.top = (my - 14) + "px";
     el.tip.style.opacity = "1";
