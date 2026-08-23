@@ -81,6 +81,21 @@ Principal fuente externa para explicar cambios de comportamiento. Variables: pre
 - **Complemento en marcha**: [Open-Meteo](https://open-meteo.com) (`api.open-meteo.com`, API documentada, gratuita y sin clave para uso no comercial), horaria, para cubrir el desfase de ~2 meses con que Open Data Euskadi publica los XML mensuales de Euskalmet. Es la que alimenta la meteo del timelapse.
 - **Matiz clave**: la única estación de Donostia con **precipitación es C017 Miramón** (43.2868, -1.97121). Santa Clara (C007) apoya con viento/temperatura. Para una ciudad de este tamaño, basta para el MVP.
 
+**¿Por qué dos fuentes de meteo?** Hacen papeles distintos y ninguna puede hacer el de la otra:
+
+| | Euskalmet C017 | Open-Meteo |
+|---|---|---|
+| Qué es | **Observación**: pluviómetro real en Miramón | **Modelo** interpolado a un punto: «realidad según un modelo» |
+| Paso | 10 min | horario |
+| Llega | con **~2 meses de retraso** (XML mensuales) | **al día**, hasta la hora actual |
+| Histórico | desde 2003 | lo que se pida (archivo, ~2 días por detrás) |
+| Riesgo | ninguno en el dato; solo el retraso | puede perderse un chubasco local |
+| Sirve para | entrenar y validar; la verdad del suelo | el timelapse en vivo y la predicción como covariable |
+
+Lo que se guarda de Open-Meteo **no es predicción**: es el análisis del modelo para horas ya pasadas. El tramo futuro (`forecast_days=1`) se descarga y se descarta; archivarlo es el pendiente que apunta [`reparto-optimo.md`](reparto-optimo.md). El timelapse se alimenta solo de Open-Meteo. Nunca se mezclan por descuido: `interval_minutes` marca la serie y los mm son acumulados del intervalo.
+
+**Pendiente que justifica tener las dos**: validar Open-Meteo contra C017. Hoy no se solapan ni un día (C017 hasta el 30 de junio, Open-Meteo desde el 1 de julio); `openmeteo.sh 2026-01-01 2026-06-30` daría seis meses de solape para medir cuánto se equivoca el modelo en Donostia por hora y por umbral de lluvia. Si acertara lo suficiente, entonces sí se podría prescindir de una.
+
 Relación espacial estación Dbizi → estación meteo más cercana vía PostGIS (con una sola estación de lluvia, trivial de inicio).
 
 **Preguntas**: ¿cómo afecta la lluvia al uso/disponibilidad? ¿hay umbral de precipitación? ¿efecto del viento y la temperatura? ¿cuánto tarda en aparecer el efecto? ¿cuánto tarda la red en recuperarse?
