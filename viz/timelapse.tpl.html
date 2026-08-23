@@ -392,7 +392,6 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                strip: document.getElementById("strip"), clo: document.getElementById("s-clo"),
                shut: document.getElementById("shut") };
   const CLOSED = hex("#c9a94f");                // cerrada o averiada: ámbar, fuera de la rampa
-  const DIS = hex("#5a3d3d");                   // bicis averiadas: segmento apagado encima de la columna
   const isOpen = (fr, i) => !fr.o || fr.o[i] === "1";
   let CTX = DATA.context || {};
   const fISO = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -734,11 +733,10 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       basePlate(s, half);   // ancla la estación aunque no tenga ni una bici
       if (h) column(s, h, half, open ? ramp(Math.min(1, v / cap)) : CLOSED, open && nb >= cap, !open);
       else emptyMark(s, half, !open);
-      // averiadas: están ancladas pero no se pueden coger; van encima, en un
-      // tono apagado, para que una estación medio llena de bicis rotas se lea
-      const nd = fr.d ? fr.d[i] : 0;
-      if (nd > 0) { column(s, nd * M_PER_BIKE, half * 0.8, DIS, false, false, h); dis += nd; }
-      occlude(s, h + nd * M_PER_BIKE, half);
+      // averiadas: no van en la barra (se probó como segmento encima y era
+      // ruido); solo en el tooltip y en el total del panel
+      if (fr.d) dis += fr.d[i];
+      occlude(s, h, half);
       if (!open) { if (!shut) labels.push([i, h, "closed"]); }
       else if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
     }
@@ -848,8 +846,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     ctx.lineTo(sx(c), sy(c)); ctx.lineTo(sx(d), sy(d)); ctx.closePath();
     ctx.fillStyle = fill; ctx.fill();
   }
-  function column(s, h, half, c, full, closed, z0 = 0) {
-    const x = s.x, y = s.y, z = s.z + z0; h += z;
+  function column(s, h, half, c, full, closed) {
+    const x = s.x, y = s.y, z = s.z; h += z;
     const B = [[x-half,y-half],[x+half,y-half],[x+half,y+half],[x-half,y+half]];
     // Las CUATRO caras, de atrás a delante. Antes se pintaban dos fijas, y las
     // fijas no son las que dan al observador: a 0° tocaban sur y este, y se
@@ -931,7 +929,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                  : r < .25 ? "casi vacía" : r > .75 ? "casi llena" : "equilibrada";
     const fd = F[Math.min(NF - 1, Math.floor(pos))].d, nd = fd ? fd[hover] : 0;
     el.tip.innerHTML = '<div class="n">' + s.n + '</div><div class="d">' +
-      v + " / " + cap + " bicis · " + estado + (nd ? " · " + nd + (nd > 1 ? " averiadas" : " averiada") : "") + "</div>";
+      v + " / " + cap + " bicis · " + estado + (nd ? " + " + nd + (nd > 1 ? " averiadas" : " averiada") : "") + "</div>";
     el.tip.style.left = mx + "px";
     el.tip.style.top = (my - 14) + "px";
     el.tip.style.opacity = "1";
