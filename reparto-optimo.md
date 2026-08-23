@@ -232,10 +232,89 @@ Dos matices:
 
 ---
 
+## Versión continua: tiempo hasta el fallo, el origen que sale gratis y la ruta de horizonte rodante
+
+Todo lo anterior está contado alrededor de una colocación nocturna, pero eso era una forma de
+hablar: como es un ejercicio 100 % teórico, no hay por qué atarlo a la franja de cierre. La
+pregunta general es, **a cualquier hora**: ¿qué estación va a quedarse sin bicis (o sin sitio)
+dentro de X tiempo, y con cuántas bicis y desde dónde habría que reabastecerla? Tiene tres piezas,
+y la tercera, que es la que parece multiplicar la diversión, en realidad la colapsa.
+
+### 1 · Tiempo hasta el fallo, por estación y en cada momento
+
+Cada estación tiene en cada instante un **tiempo hasta el fallo**: cuánto falta para llegar a 0
+(o a llena) si la marea sigue como suele. No es un número sino una distribución: *«Bera Bera tiene
+un 70 % de probabilidad de quedarse a cero antes de 40 minutos»*. Sale directamente del modelo de
+deriva (tasa neta por estación, hora y día-tipo, con las covariables de meteo, calendario y
+eventos) y se recalcula con cada captura del collector.
+
+La alarma es **P(fallo antes de X) > umbral**, y X no es arbitrario: lo fija el tiempo que tarda
+el camión en llegar. Predecir un fallo a 10 minutos no sirve de nada si el trayecto son 25. Dicho
+al revés: el horizonte útil de la predicción es el tiempo de respuesta del operador.
+
+### 2 · De dónde traerlas: no la más cercana, la que sale gratis
+
+Mover bicis no crea nada: **traslada riesgo**. Cada movimiento tiene un balance: lo que gana el
+destino (tiempo en banda que recupera) menos lo que pierde el origen (tiempo en banda que se le
+quita al acercarlo a cero). La intuición de «la más cercana» confunde distancia con coste: el coste
+real es la distancia **más el daño en el origen**, y ese daño puede ser **negativo**.
+
+Porque hay estaciones donde quitar bicis es un favor: las que están llenas o llenándose (Segundo
+Izpizua a las 20:00, Gros entero a media tarde). Sacar ocho bicis de una que va a llenarse **suma
+en los dos extremos**; sacarlas de una vecina equilibrada resta en uno. El mejor origen no es el
+más próximo sino el que tiene el tiempo hasta el fallo *por arriba* más corto.
+
+¿Y cuántas? Las que maximizan el balance conjunto, que normalmente es **hasta igualar el tiempo
+hasta el fallo de origen y destino**, no hasta llenar el destino. Llenar el destino es repetir el
+error del operador nocturno con otro horario.
+
+### 3 · La cascada es una ruta
+
+«Vaciar la vecina y luego rellenar la vecina desde otra» parece un problema nuevo, pero el camión
+lleva un inventario a bordo y visita estaciones en orden, cargando en unas y descargando en otras:
+la cascada es exactamente **una ruta de tres paradas**. La pregunta correcta no es «¿cascada o
+estación lejana?» sino *«qué secuencia de paradas, con qué carga en cada una, maximiza el tiempo en
+banda ganado en toda la red menos el tiempo de camión»*.
+
+Eso tiene nombre, **dynamic bike repositioning problem** (Raviv y Tzur, 2013, para la versión
+estática; variantes dinámicas después), y con 70 estaciones y un camión se resuelve bien con
+heurísticas (greedy por balance marginal más mejora local) o incluso con un MILP pequeño.
+
+Lo que lo hace manejable es que la planificación es de **horizonte rodante**, al estilo del control
+predictivo (MPC): se planean las próximas 2-3 horas, se ejecuta solo la primera parada, se vuelve a
+medir y se replanea. La cascada completa nunca se compromete de antemano; se recalcula con cada
+captura, que es justo lo que pide una demanda irregular. Y encaja con el bucle de «¿se afinaría
+solo?»: cada replaneo es una decisión más con su resultado observado.
+
+Lo que **no** cambia respecto al resto del documento: el modelo de deriva sigue siendo la pieza uno
+y sigue necesitando descensurar (una estación a cero no dice cuánta demanda se perdió), y el
+objetivo sigue siendo tiempo en banda y no «nadie a cero», porque el camión también cuesta.
+
+### Sin camión: el mismo cálculo como incentivo a los usuarios — *Bike Angels*
+
+El balance marginal de la pieza 2 no necesita un camión para aplicarse. Citi Bike (Nueva York)
+lo hace desde 2016 con **Bike Angels**: la app muestra estaciones con puntos, positivos por sacar
+una bici de una estación llena y por dejarla en una vacía, y los usuarios que lo hacen acumulan
+puntos canjeables (extensiones de abono, regalos). Los puntos se recalculan en tiempo real a partir
+de exactamente el tipo de predicción que se describe arriba: cuánto va a sufrir cada estación en
+la próxima hora. Lyft cuenta decenas de miles de «ángeles» y una fracción apreciable del
+reequilibrio total de la red hecha por usuarios, a un coste por bici movida muy inferior al del
+camión, y además en los momentos en que el camión no llega (hora punta, centro congestionado).
+
+Para Dbizi sería un sistema de incentivos **a los propios usuarios**: un «+2 si la dejas en Bera
+Bera» en vez de un camión subiendo la cuesta. Con lo que este proyecto ya recoge se podría calcular
+el mapa de puntos; lo que no se puede es probarlo, porque requiere la app del operador. Pero vale
+como segundo consumidor del modelo de deriva, y como argumento: el mismo número (tiempo hasta el
+fallo, balance marginal) sirve tanto para decidir el camión como para mover a la gente.
+
+---
+
 ## Preguntas abiertas
 
 - ¿El patrón "periferia y cuesta arriba se vacía" se sostiene fuera de agosto?
 - ¿Con qué frecuencia redistribuye el operador de verdad? Una noche sin actividad no es un patrón.
 - ¿Cuánto dura la recuperación espontánea de una estación vacía, y cuándo no la hay?
 - ¿La lluvia agrava el desequilibrio o simplemente reduce el uso de forma uniforme?
-- ¿La franja de cierre 00:00-06:00 es fija todo el año o cambia por temporada?
+- ¿La franja de cierre (00:00-06:00 de lunes a viernes; fines de semana y festivos, 24 h) cambia por temporada?
+- ¿Con qué tiempo de respuesta real opera el camión? Fija el horizonte útil de la predicción.
+- ¿Cuánto del reequilibrio podrían hacer los usuarios con incentivos, y a qué precio en puntos equivaldría un camión?

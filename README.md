@@ -318,7 +318,11 @@ un **reparto hipotético en camión** que maximice el tiempo que cada estación 
 sana (con bicis que coger y anclajes donde dejar). Documento propio en
 [`reparto-optimo.md`](reparto-optimo.md), con lo que ya se ve en los primeros datos (la periferia
 cuesta arriba se vacía; Dbizi cierra de 00:00 a 06:00; no se detecta camión), el problema
-metodológico de fondo (solo se observa inventario, nunca demanda) y el plan por etapas.
+metodológico de fondo (solo se observa inventario, nunca demanda), el plan por etapas y la
+versión continua del problema: tiempo hasta el fallo por estación a cualquier hora, el origen que
+«sale gratis» (la estación que va a llenarse, no la más cercana) y la cascada como ruta de
+horizonte rodante. Incluye el mismo cálculo sin camión, como incentivo a los usuarios al estilo
+*Bike Angels* de Citi Bike.
 
 ## 19. Ideas para jugar
 
