@@ -64,7 +64,7 @@ def build_frames(path, st, minutes):
     directo), y una animación necesita paso constante para no dar tirones.
     """
     idx = {s["id"]: i for i, s in enumerate(st)}
-    snaps, opens = {}, {}
+    snaps, opens, dis = {}, {}, {}
     for r in csv.reader(open(path, encoding="utf-8")):
         if len(r) < 3 or r[0] not in idx or not r[2].strip():
             continue
@@ -72,6 +72,9 @@ def build_frames(path, st, minutes):
         # 4a columna opcional: abierta (t/1) o cerrada/averiada (f/0)
         if len(r) > 3 and r[3].strip():
             opens.setdefault(r[1], {})[idx[r[0]]] = r[3].strip().lower() in ("t", "1", "true")
+        # 5a opcional: bicis averiadas ancladas
+        if len(r) > 4 and r[4].strip():
+            dis.setdefault(r[1], {})[idx[r[0]]] = int(r[4])
     if not snaps:
         sys.exit(f"{path}: sin mediciones")
     keys = sorted(snaps)
@@ -81,18 +84,20 @@ def build_frames(path, st, minutes):
     # son las dos. Se cuenta aquí, antes de cuadricular a 5 min, porque un +1
     # y un -1 dentro del mismo frame se anulan. Un salto de 6 o más de golpe
     # en 2 min no son usuarios, es el camión de reparto: no cuenta. Una
-    # estación cerrada tampoco. Sale como acumulado [salidas, llegadas].
+    # estación cerrada tampoco. Una bici que pasa a averiada (sube
+    # vehicles_disabled lo mismo que baja bikes_available) no es una salida, ni
+    # la reparada una llegada. Sale como acumulado [salidas, llegadas].
     dep = arr = 0; prev = None; moves = {}
     for _, key in ordered:
-        m = snaps[key]; o = opens.get(key, {})
+        m = snaps[key]; o = opens.get(key, {}); dd = dis.get(key, {})
         if prev is not None:
-            pm, po = snaps[prev], opens.get(prev, {})
+            pm, po, pd = snaps[prev], opens.get(prev, {}), dis.get(prev, {})
             for i, v in m.items():
                 if i not in pm or not (o.get(i, True) and po.get(i, True)): continue
-                d = v - pm[i]
+                d = v - pm[i]; broke = dd.get(i, 0) - pd.get(i, 0)
                 if abs(d) >= TRUCK: continue
-                if d < 0: dep -= d
-                else: arr += d
+                if d < 0: dep += max(0, -d - max(0, broke))
+                else: arr += max(0, d - max(0, -broke))
         moves[key] = (dep, arr); prev = key
     t, end = ordered[0][0].replace(second=0, microsecond=0), ordered[-1][0]
     frames, j, last = [], 0, None
@@ -106,6 +111,8 @@ def build_frames(path, st, minutes):
                   "v": list(moves[last])}
             if last in opens:   # cadena compacta: '1' abierta, '0' cerrada
                 o = opens[last]; fr["o"] = "".join("1" if o.get(i, True) else "0" for i in range(len(st)))
+            if last in dis:
+                dd = dis[last]; fr["d"] = [dd.get(i, 0) for i in range(len(st))]
             frames.append(fr)
         t += timedelta(minutes=minutes)
     return frames

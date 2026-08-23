@@ -163,6 +163,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:#e6c56b"></span>Cerradas</span><span class="v" id="s-clo">—<small>/70</small></span></div>
+  <div class="stat" id="s-dis-row" hidden title="Bicis ancladas que el sistema da por averiadas: ocupan anclaje y no se pueden coger."><span class="k"><span class="dot" style="background:#5a3d3d"></span>Bicis averiadas</span><span class="v" id="s-dis">—</span></div>
   <button id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5.5 1.5v3M10.5 1.5v3"/></svg>
     <span>Ver agenda del día</span><span class="n" id="ev-n">—</span>
@@ -380,7 +381,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   const SPF = 130;                              // ms por frame de 5 min
   const el = { time: document.getElementById("time"), day: document.getElementById("day"),
                tot: document.getElementById("s-tot"), trips: document.getElementById("s-trips"),
-               tripsRow: document.getElementById("s-trips-row"), since: document.getElementById("s-since"), emp: document.getElementById("s-emp"),
+               tripsRow: document.getElementById("s-trips-row"), since: document.getElementById("s-since"),
+               dis: document.getElementById("s-dis"), disRow: document.getElementById("s-dis-row"), emp: document.getElementById("s-emp"),
                ful: document.getElementById("s-ful"), scrub: document.getElementById("scrub"),
                live: document.getElementById("s-live"), age: document.getElementById("s-age"),
                play: document.getElementById("play"), speed: document.getElementById("speed"),
@@ -390,6 +392,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                strip: document.getElementById("strip"), clo: document.getElementById("s-clo"),
                shut: document.getElementById("shut") };
   const CLOSED = hex("#c9a94f");                // cerrada o averiada: ámbar, fuera de la rampa
+  const DIS = hex("#5a3d3d");                   // bicis averiadas: segmento apagado encima de la columna
   const isOpen = (fr, i) => !fr.o || fr.o[i] === "1";
   let CTX = DATA.context || {};
   const fISO = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -715,7 +718,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     ctx.drawImage(tcv, 0, 0, W, H);
 
     const half = SIDE / 2, labels = [];
-    let tot = 0, emp = 0, ful = 0, clo = 0;
+    let tot = 0, emp = 0, ful = 0, clo = 0, dis = 0;
     for (let i = 0; i < N; i++) if (!isOpen(fr, i)) clo++;
     const shut = clo >= N * 0.9;                // cierra la red entera (00-06 h): se dice una vez
     for (const i of painter()) {
@@ -731,7 +734,11 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       basePlate(s, half);   // ancla la estación aunque no tenga ni una bici
       if (h) column(s, h, half, open ? ramp(Math.min(1, v / cap)) : CLOSED, open && nb >= cap, !open);
       else emptyMark(s, half, !open);
-      occlude(s, h, half);
+      // averiadas: están ancladas pero no se pueden coger; van encima, en un
+      // tono apagado, para que una estación medio llena de bicis rotas se lea
+      const nd = fr.d ? fr.d[i] : 0;
+      if (nd > 0) { column(s, nd * M_PER_BIKE, half * 0.8, DIS, false, false, h); dis += nd; }
+      occlude(s, h + nd * M_PER_BIKE, half);
       if (!open) { if (!shut) labels.push([i, h, "closed"]); }
       else if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
     }
@@ -789,6 +796,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     el.emp.innerHTML = emp + '<small>/' + N + '</small>';
     el.ful.innerHTML = ful + '<small>/' + N + '</small>';
     el.clo.innerHTML = clo + '<small>/' + N + '</small>';
+    if (fr.d) { el.disRow.hidden = false; el.dis.textContent = dis; }
     const pct = (pos / (NF - 1)) * 100;
     el.scrub.value = String(Math.round(pct));
     el.scrub.style.setProperty("--pct", pct.toFixed(1) + "%");
@@ -840,8 +848,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     ctx.lineTo(sx(c), sy(c)); ctx.lineTo(sx(d), sy(d)); ctx.closePath();
     ctx.fillStyle = fill; ctx.fill();
   }
-  function column(s, h, half, c, full, closed) {
-    const x = s.x, y = s.y, z = s.z; h += z;
+  function column(s, h, half, c, full, closed, z0 = 0) {
+    const x = s.x, y = s.y, z = s.z + z0; h += z;
     const B = [[x-half,y-half],[x+half,y-half],[x+half,y+half],[x-half,y+half]];
     // Las CUATRO caras, de atrás a delante. Antes se pintaban dos fijas, y las
     // fijas no son las que dan al observador: a 0° tocaban sur y este, y se
@@ -921,8 +929,9 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     const estado = !isOpen(F[Math.min(NF - 1, Math.floor(pos))], hover) ? "cerrada o averiada"
                  : v <= 0 ? "sin bicis" : v >= cap ? "sin anclajes libres"
                  : r < .25 ? "casi vacía" : r > .75 ? "casi llena" : "equilibrada";
+    const fd = F[Math.min(NF - 1, Math.floor(pos))].d, nd = fd ? fd[hover] : 0;
     el.tip.innerHTML = '<div class="n">' + s.n + '</div><div class="d">' +
-      v + " / " + cap + " bicis · " + estado + "</div>";
+      v + " / " + cap + " bicis · " + estado + (nd ? " · " + nd + (nd > 1 ? " averiadas" : " averiada") : "") + "</div>";
     el.tip.style.left = mx + "px";
     el.tip.style.top = (my - 14) + "px";
     el.tip.style.opacity = "1";
