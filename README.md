@@ -1,4 +1,4 @@
-# Donostia Bike Intelligence
+# Txirrin — Donostia Bike Intelligence
 
 ## 1. Idea del proyecto
 

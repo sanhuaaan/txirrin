@@ -31,7 +31,7 @@ Estado a 2026-08-21. Coste: **0 €/mes**.
 ## VM
 
 - **`dbizi-vm`**: e2-micro free tier (2 vCPU compartidas, 1 GB RAM, 30 GB pd-standard), Ubuntu 24.04, `us-west1-a`. Scopes: `devstorage.read_write` y `logging.write`. IP efímera — no depender de ella.
-- Proyecto GCP **`cosas-con-datos-en-dbizi`** (cuenta personal). Alerta de presupuesto: 1 € (email al 50%/100%).
+- Proyecto GCP **`cosas-con-datos-en-dbizi`** (cuenta personal; el repo pasó a llamarse `txirrin` el 2026-08-22, el proyecto y los buckets conservan el nombre antiguo porque renombrar un proyecto GCP no es posible y los buckets obligarían a migrar datos y permisos). Alerta de presupuesto: 1 € (email al 50%/100%).
 - En local, todo con la configuración gcloud **`dbizi`** (la `default` del trabajo no se toca).
 - Los fuentes van **planos a `~`**: en la VM no hay subdirectorios, así que los scripts que necesitan la plantilla o la geometría reciben la ruta por argumento.
 - ⚠️ **Con 1 GB de RAM, las cargas masivas largas (multi-año) saturan la máquina hasta tumbar el SSH** — cargar de año en año. El 2026-08-21, durante la carga inicial multi-año de Euskalmet, el collector murió a mitad de escritura y dejó un `~/raw/20260821/080401_status.json.gz` de **0 bytes** (gzip no vacía su búfer hasta `close()`, así que un payload vacío bien cerrado ocupa 28 bytes y 0 solo sale de una muerte a media escritura). Desde entonces el crudo se escribe a `.tmp` y se renombra: un proceso matado deja un `.tmp`, nunca un `.json.gz` que parezca un snapshot.
