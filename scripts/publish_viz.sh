@@ -33,6 +33,14 @@ Q "SELECT station_id, to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS')
    WHERE ts >= now() - interval '$VENTANA_H hours'
    ORDER BY ts, station_id;" > "$TMP/meas.csv"
 
+# salud del feed: instante del último snapshot, cuándo lo capturamos y lo
+# último que reportó alguna estación. Si ts se queda atrás y fetched_at no,
+# el feed está parado y la web lo dice (si no, mostraría datos viejos como frescos).
+Q "SELECT to_char(max(ts) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'),
+          to_char(max(fetched_at) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'),
+          to_char(max(last_reported) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS')
+   FROM dbizi_measurement WHERE ts >= now() - interval '2 hours';" > "$TMP/meta.csv"
+
 # contexto: meteo horaria (Open-Meteo), festivos y la ultima cosecha de eventos
 Q "SELECT to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'), temperature, precipitation, wind_speed
    FROM weather_measurement
@@ -49,6 +57,7 @@ Q "SELECT kind, name, to_char(starts_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:
 
 python3 ~/build_timelapse.py "$TMP/stations.csv" "$TMP/meas.csv" \
   --geo ~/donostia-barrios.json --tpl ~/timelapse.tpl.html --json-only "$TMP/data.json" \
+  --meta "$TMP/meta.csv" \
   --weather "$TMP/weather.csv" --holidays "$TMP/holidays.csv" ${EVENTS:+--events "$EVENTS"} \
   --events-db "$TMP/events_db.csv" > /dev/null
 

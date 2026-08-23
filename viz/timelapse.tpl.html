@@ -61,6 +61,9 @@ h1 em{font-style:italic; font-weight:500; font-size:.5em; color:var(--ink-2); wh
 .stat .k{font-size:11px; color:var(--ink-2); letter-spacing:.03em}
 .stat .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:16px}
 .stat .v small{font-size:11px; color:var(--ink-3)}
+.stat .k small{font-size:10px; color:var(--ink-3)}
+#s-live.stale .v{color:#e6c56b}
+#s-live.stale .pulse{background:#e6c56b; animation:none}
 button#ev{width:100%; min-width:0; margin-top:10px; padding:8px 10px; display:flex; align-items:center; gap:8px;
   font-size:12px; color:var(--ink-2); background:#18222c; border:1px solid var(--ink-3); border-radius:3px}
 button#ev:hover{color:var(--ink); border-color:var(--ink-2); background:#1d2935}
@@ -156,6 +159,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 <div class="overlay" id="stats">
   <div class="stat" id="s-live" hidden><span class="k"><span class="pulse"></span>Última captura</span><span class="v" id="s-age">—</span></div>
   <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
+  <div class="stat" id="s-trips-row" hidden title="Salidas y llegadas contadas de captura en captura (2 min); un viaje son las dos. Los saltos de 6 o más bicis de golpe son el camión de reparto y no cuentan."><span class="k">Viajes <small id="s-since"></small></span><span class="v" id="s-trips">—</span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:#e6c56b"></span>Cerradas</span><span class="v" id="s-clo">—<small>/70</small></span></div>
@@ -375,7 +379,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   let pos = 0, playing = false, last = 0;
   const SPF = 130;                              // ms por frame de 5 min
   const el = { time: document.getElementById("time"), day: document.getElementById("day"),
-               tot: document.getElementById("s-tot"), emp: document.getElementById("s-emp"),
+               tot: document.getElementById("s-tot"), trips: document.getElementById("s-trips"),
+               tripsRow: document.getElementById("s-trips-row"), since: document.getElementById("s-since"), emp: document.getElementById("s-emp"),
                ful: document.getElementById("s-ful"), scrub: document.getElementById("scrub"),
                live: document.getElementById("s-live"), age: document.getElementById("s-age"),
                play: document.getElementById("play"), speed: document.getElementById("speed"),
@@ -430,9 +435,27 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     if (!cw) return;
     c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr);
     const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
-    if (!W_.length) return;
     const t0 = new Date(F[0].t + "Z"), t1 = new Date(F[NF - 1].t + "Z"), span = (t1 - t0) || 1;
     const X = (t) => 8 + (new Date(t + "Z") - t0) / span * (cw - 16);   // 8 px: medio pomo
+    // actividad: viajes por hora (media móvil de una hora sobre los frames),
+    // como área tenue debajo de la meteo. Es la curva del día: dónde se
+    // mueve la ciudad y dónde no.
+    if (F[0].v) {
+      const mv = F.map(f => (f.v[0] + f.v[1]) / 2), per = [];
+      for (let i = 0; i < NF; i++) {
+        let j = i; while (j > 0 && new Date(F[i].t + "Z") - new Date(F[j - 1].t + "Z") < 36e5) j--;
+        const hrs = (new Date(F[i].t + "Z") - new Date(F[j].t + "Z")) / 36e5;
+        per.push(hrs > 0.5 ? (mv[i] - mv[j]) / hrs : 0);
+      }
+      const pmax = Math.max(10, ...per);
+      g.beginPath(); g.moveTo(X(F[0].t), ch);
+      for (let i = 0; i < NF; i++) g.lineTo(X(F[i].t), ch - (per[i] / pmax) * (ch - 6));
+      g.lineTo(X(F[NF - 1].t), ch); g.closePath();
+      g.fillStyle = "rgba(230,237,243,.13)"; g.fill();
+      g.font = '10px "IBM Plex Mono", monospace'; g.fillStyle = "rgba(147,162,176,.6)";
+      g.textAlign = "right"; g.textBaseline = "top"; g.fillText(Math.round(pmax) + " viajes/h", cw, 0);
+    }
+    if (!W_.length) return;
     const temps = W_.map(w => w.temp).filter(v => v != null);
     const tmin = Math.min(...temps), tmax = Math.max(...temps), tr = Math.max(3, tmax - tmin);
     const mmax = Math.max(1.5, ...W_.map(w => w.mm || 0));
@@ -460,17 +483,22 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
 
   // bicis por estación en `pos`, interpolando entre frames para que crezcan suave
   const bikes = new Float32Array(N);
-  // Minutos acumulados sin bicis / sin anclajes por estación hasta cada frame:
-  // la huella del fallo. Se recalcula al refrescar, cuesta 300x70 sumas.
+  // Minutos sin bicis / sin anclajes por estación hasta cada frame, con
+  // olvido: la huella del fallo. Cada minuto que pasa sin fallo la resta se
+  // come una parte (vida media ~1 h), así una estación que se vació de
+  // madrugada y ya va equilibrada no sigue en rojo a mediodía; un fallo que
+  // dura deja un círculo grande. Se recalcula al refrescar, 300x70 sumas.
   let cumE, cumF;
+  const OLVIDO = 90;                            // minutos: constante de tiempo
   function accumulate() {
     cumE = new Float32Array(NF * N); cumF = new Float32Array(NF * N);
     for (let f = 1; f < NF; f++) {
       const b = F[f - 1].b, dt = (new Date(F[f].t + "Z") - new Date(F[f - 1].t + "Z")) / 6e4;
+      const keep = Math.exp(-dt / OLVIDO);
       for (let i = 0; i < N; i++) {
         const op = isOpen(F[f - 1], i);         // cerrada no es vacía ni llena: no deja huella
-        cumE[f * N + i] = cumE[(f - 1) * N + i] + (op && b[i] <= 0 ? dt : 0);
-        cumF[f * N + i] = cumF[(f - 1) * N + i] + (op && b[i] >= (S[i].c || 1) ? dt : 0);
+        cumE[f * N + i] = cumE[(f - 1) * N + i] * keep + (op && b[i] <= 0 ? dt : 0);
+        cumF[f * N + i] = cumF[(f - 1) * N + i] * keep + (op && b[i] >= (S[i].c || 1) ? dt : 0);
       }
     }
   }
@@ -730,11 +758,30 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     el.time.textContent = fTime.format(new Date(fr.t + "Z"));
     context(fr);
     el.tot.textContent = tot;
+    if (fr.v) {                                  // viajes estimados desde el principio de la ventana
+      el.tripsRow.hidden = false;
+      el.trips.textContent = "\u2248" + Math.round((fr.v[0] + fr.v[1]) / 2);
+      el.since.textContent = "desde las " + fTime.format(new Date(F[0].t + "Z"));
+    }
     if (SRC) {                                   // en la web viva, edad del último dato
       const mins = Math.round((Date.now() - new Date(F[NF - 1].t + "Z")) / 6e4);
       el.live.hidden = false;
       el.age.textContent = mins < 1 ? "ahora" : mins < 60 ? "hace " + mins + " min"
                           : "hace " + Math.floor(mins / 60) + " h";
+      // Feed parado: capturamos (fetched_at avanza) pero el feed repite el
+      // mismo instante (ts no avanza). Sin esto, datos viejos parecerían
+      // frescos. Si tampoco capturamos, es el collector, y se dice.
+      const M = DATA.meta, now = Date.now();
+      let stale = "";
+      if (M && M.fetched) {
+        const lagFeed = (new Date(M.fetched + "Z") - new Date(M.ts + "Z")) / 6e4;
+        const lagUs = (now - new Date(M.fetched + "Z")) / 6e4;
+        if (lagUs > 15) stale = "sin capturas desde las " + fTime.format(new Date(M.fetched + "Z"));
+        else if (lagFeed > 10) stale = "feed de Dbizi parado desde las " + fTime.format(new Date(M.ts + "Z"));
+      }
+      el.live.classList.toggle("stale", !!stale);
+      el.live.title = stale;
+      if (stale) el.age.textContent = stale;
     }
     el.emp.innerHTML = emp + '<small>/' + N + '</small>';
     el.ful.innerHTML = ful + '<small>/' + N + '</small>';
@@ -823,8 +870,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   // Huella: disco en el suelo que crece con las horas de fallo acumuladas en
   // la ventana. Al final del día se ve dónde duele sin mover el reproductor.
   function footprint(s, mins, col) {
-    if (mins < 5) return;
-    const r = Math.min(300, 50 + 75 * Math.sqrt(mins / 60));   // 1 h: 125 m, 4 h: 200 m, techo 300 m
+    if (mins < 8) return;
+    const r = Math.min(300, 50 + 75 * Math.sqrt(mins / 60));   // 1 h: 125 m, techo 300 m (con olvido, ~1,5 h seguidas)
     ctx.beginPath();
     for (let a = 0; a < 24; a++) {
       const q = iso(s.x + r * Math.cos(a * .2618), s.y + r * Math.sin(a * .2618), s.z + 1);

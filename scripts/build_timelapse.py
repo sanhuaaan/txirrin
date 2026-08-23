@@ -54,6 +54,9 @@ def load_stations(path, center=None):
     return st, (lat0, lon0)
 
 
+TRUCK = 6   # bicis que cambian de golpe entre dos capturas: reparto, no uso
+
+
 def build_frames(path, st, minutes):
     """Rejilla regular tomando el último snapshot anterior a cada marca.
 
@@ -73,6 +76,24 @@ def build_frames(path, st, minutes):
         sys.exit(f"{path}: sin mediciones")
     keys = sorted(snaps)
     ordered = [(datetime.fromisoformat(k), k) for k in keys]
+    # Viajes estimados: de snapshot a snapshot (2 min), cada bici que falta en
+    # una estación es una salida y cada una que aparece, una llegada; un viaje
+    # son las dos. Se cuenta aquí, antes de cuadricular a 5 min, porque un +1
+    # y un -1 dentro del mismo frame se anulan. Un salto de 6 o más de golpe
+    # en 2 min no son usuarios, es el camión de reparto: no cuenta. Una
+    # estación cerrada tampoco. Sale como acumulado [salidas, llegadas].
+    dep = arr = 0; prev = None; moves = {}
+    for _, key in ordered:
+        m = snaps[key]; o = opens.get(key, {})
+        if prev is not None:
+            pm, po = snaps[prev], opens.get(prev, {})
+            for i, v in m.items():
+                if i not in pm or not (o.get(i, True) and po.get(i, True)): continue
+                d = v - pm[i]
+                if abs(d) >= TRUCK: continue
+                if d < 0: dep -= d
+                else: arr += d
+        moves[key] = (dep, arr); prev = key
     t, end = ordered[0][0].replace(second=0, microsecond=0), ordered[-1][0]
     frames, j, last = [], 0, None
     while t <= end:
@@ -81,7 +102,8 @@ def build_frames(path, st, minutes):
             j += 1
         if last is not None:
             m = snaps[last]
-            fr = {"t": t.strftime("%Y-%m-%dT%H:%M"), "b": [m.get(i, 0) for i in range(len(st))]}
+            fr = {"t": t.strftime("%Y-%m-%dT%H:%M"), "b": [m.get(i, 0) for i in range(len(st))],
+                  "v": list(moves[last])}
             if last in opens:   # cadena compacta: '1' abierta, '0' cerrada
                 o = opens[last]; fr["o"] = "".join("1" if o.get(i, True) else "0" for i in range(len(st)))
             frames.append(fr)
@@ -178,6 +200,7 @@ def main():
     ap.add_argument("--weather", help="CSV ts,temp,mm,viento (horario) de la ventana; opcional")
     ap.add_argument("--holidays", help="CSV fecha,nombre; opcional")
     ap.add_argument("--events", help="cosecha de eventos (events_YYYYMMDD.json.gz); opcional")
+    ap.add_argument("--meta", help="CSV de una fila: max(ts), max(fetched_at), max(last_reported); para detectar feed parado")
     ap.add_argument("--events-db", help="CSV de la tabla event (deporte y pruebas populares, con hora y sitio); opcional")
     a = ap.parse_args()
 
@@ -190,6 +213,9 @@ def main():
             "stations": [{k: s[k] for k in ("id", "n", "x", "y", "c")} for s in st],
             "frames": frames,
             "context": load_context(a.weather, a.holidays, a.events, frames, a.events_db, center)}
+    if a.meta and os.path.exists(a.meta):
+        for r in csv.reader(open(a.meta, encoding="utf-8")):
+            if len(r) >= 3: data["meta"] = {"ts": r[0], "fetched": r[1], "reported": r[2]}
     blob = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     span = (datetime.fromisoformat(frames[-1]["t"]) - datetime.fromisoformat(frames[0]["t"]))
     resumen = (f"{len(st)} estaciones, {len(frames)} frames de {a.minutes} min "
