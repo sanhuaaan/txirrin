@@ -26,7 +26,9 @@ Q() { sudo docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" dbizi-postgres-1 \
 Q "SELECT station_id, name, ST_Y(geom), ST_X(geom), capacity
    FROM dbizi_station ORDER BY station_id;" > "$TMP/stations.csv"
 
-Q "SELECT station_id, to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'), bikes_available
+# 4a columna: abierta = instalada y (presta o admite). Cerrada o averiada si no.
+Q "SELECT station_id, to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'), bikes_available,
+          (coalesce(is_installed,true) AND (coalesce(is_renting,true) OR coalesce(is_returning,true)))
    FROM dbizi_measurement
    WHERE ts >= now() - interval '$VENTANA_H hours'
    ORDER BY ts, station_id;" > "$TMP/meas.csv"

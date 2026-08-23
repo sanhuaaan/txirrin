@@ -61,11 +61,14 @@ def build_frames(path, st, minutes):
     directo), y una animación necesita paso constante para no dar tirones.
     """
     idx = {s["id"]: i for i, s in enumerate(st)}
-    snaps = {}
+    snaps, opens = {}, {}
     for r in csv.reader(open(path, encoding="utf-8")):
         if len(r) < 3 or r[0] not in idx or not r[2].strip():
             continue
         snaps.setdefault(r[1], {})[idx[r[0]]] = int(r[2])
+        # 4a columna opcional: abierta (t/1) o cerrada/averiada (f/0)
+        if len(r) > 3 and r[3].strip():
+            opens.setdefault(r[1], {})[idx[r[0]]] = r[3].strip().lower() in ("t", "1", "true")
     if not snaps:
         sys.exit(f"{path}: sin mediciones")
     keys = sorted(snaps)
@@ -78,8 +81,10 @@ def build_frames(path, st, minutes):
             j += 1
         if last is not None:
             m = snaps[last]
-            frames.append({"t": t.strftime("%Y-%m-%dT%H:%M"),
-                           "b": [m.get(i, 0) for i in range(len(st))]})
+            fr = {"t": t.strftime("%Y-%m-%dT%H:%M"), "b": [m.get(i, 0) for i in range(len(st))]}
+            if last in opens:   # cadena compacta: '1' abierta, '0' cerrada
+                o = opens[last]; fr["o"] = "".join("1" if o.get(i, True) else "0" for i in range(len(st)))
+            frames.append(fr)
         t += timedelta(minutes=minutes)
     return frames
 

@@ -49,6 +49,9 @@ h1 em{font-style:italic; font-weight:500; font-size:.5em; color:var(--ink-2); wh
 #day .kind.fest{color:#e6c56b}
 #wx{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-2); margin-top:.45em}
 #wx .rain{color:#7fb4ff}
+#shut[hidden]{display:none}
+#shut{display:inline-block; margin-top:.5em; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+      color:var(--ink-2); border:1px solid var(--ink-3); border-radius:2px; padding:3px 7px}
 
 /* ---- estadísticas ---- */
 #stats{top:calc(var(--space) + 108px); right:var(--space); display:flex; flex-direction:column; gap:2px;
@@ -145,6 +148,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
     <div id="time">--:--</div>
     <div id="day">&nbsp;</div>
     <div id="wx" hidden></div>
+    <div id="shut" hidden>servicio cerrado</div>
   </div>
 </div>
 
@@ -153,6 +157,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k">Bicis en la red</span><span class="v" id="s-tot">—</span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
+  <div class="stat"><span class="k"><span class="dot" style="background:#5a626c"></span>Cerradas</span><span class="v" id="s-clo">—<small>/70</small></span></div>
   <button id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5.5 1.5v3M10.5 1.5v3"/></svg>
     <span>Ver agenda del día</span><span class="n" id="ev-n">—</span>
@@ -376,7 +381,10 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                tip: document.getElementById("tip"), wx: document.getElementById("wx"),
                ev: document.getElementById("ev"), evn: document.getElementById("ev-n"),
                evc: document.getElementById("ev-counts"), evl: document.getElementById("ev-list"),
-               strip: document.getElementById("strip") };
+               strip: document.getElementById("strip"), clo: document.getElementById("s-clo"),
+               shut: document.getElementById("shut") };
+  const CLOSED = hex("#3d434b");                // cerrada o averiada: gris, fuera de la rampa
+  const isOpen = (fr, i) => !fr.o || fr.o[i] === "1";
   let CTX = DATA.context || {};
   const fISO = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" });
   const fNum = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 });
@@ -458,8 +466,9 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     for (let f = 1; f < NF; f++) {
       const b = F[f - 1].b, dt = (new Date(F[f].t + "Z") - new Date(F[f - 1].t + "Z")) / 6e4;
       for (let i = 0; i < N; i++) {
-        cumE[f * N + i] = cumE[(f - 1) * N + i] + (b[i] <= 0 ? dt : 0);
-        cumF[f * N + i] = cumF[(f - 1) * N + i] + (b[i] >= (S[i].c || 1) ? dt : 0);
+        const op = isOpen(F[f - 1], i);         // cerrada no es vacía ni llena: no deja huella
+        cumE[f * N + i] = cumE[(f - 1) * N + i] + (op && b[i] <= 0 ? dt : 0);
+        cumF[f * N + i] = cumF[(f - 1) * N + i] + (op && b[i] >= (S[i].c || 1) ? dt : 0);
       }
     }
   }
@@ -649,27 +658,33 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     ctx.drawImage(tcv, 0, 0, W, H);
 
     const half = SIDE / 2, labels = [];
-    let tot = 0, emp = 0, ful = 0;
+    let tot = 0, emp = 0, ful = 0, clo = 0;
+    for (let i = 0; i < N; i++) if (!isOpen(fr, i)) clo++;
+    const shut = clo >= N * 0.9;                // cierra la red entera (00-06 h): se dice una vez
     for (const i of painter()) {
-      const s = S[i], v = bikes[i], cap = s.c || 1;
+      const s = S[i], v = bikes[i], cap = s.c || 1, open = isOpen(fr, i);
       const nb = Math.round(v);
-      tot += nb; if (nb <= 0) emp++; if (nb >= cap) ful++;
+      tot += nb;
+      if (open) { if (nb <= 0) emp++; if (nb >= cap) ful++; }
 
       const fi = Math.min(NF - 1, Math.floor(pos));
       footprint(s, cumE[fi * N + i], EMPTY); footprint(s, cumF[fi * N + i], FULL);
       const h = v > .05 ? v * M_PER_BIKE : 0;
       shadow(s, h, half);
       basePlate(s, half);   // ancla la estación aunque no tenga ni una bici
-      if (h) column(s, h, half, ramp(Math.min(1, v / cap)), nb >= cap);
-      else emptyMark(s, half);
+      if (h) column(s, h, half, open ? ramp(Math.min(1, v / cap)) : CLOSED, open && nb >= cap, !open);
+      else emptyMark(s, half, !open);
       occlude(s, h, half);
-      if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
+      if (!open) { if (!shut) labels.push([i, h, "closed"]); }
+      else if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
     }
+    el.shut.hidden = !shut;
     // etiquetas solo de las que fallan ahora, encima de todo
     ctx.font = '500 10px "IBM Plex Sans", sans-serif'; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     const placed = [];
     for (const [i, h, full] of labels.sort((a, b) => sy(iso(S[a[0]].x, S[a[0]].y, 0)) - sy(iso(S[b[0]].x, S[b[0]].y, 0)))) {
-      const s = S[i], p = iso(s.x, s.y, s.z + h), txt = s.n.replace(/^\d+\s*[-–]\s*/, "");
+      const s = S[i], p = iso(s.x, s.y, s.z + h);
+      const txt = s.n.replace(/^\d+\s*[-–]\s*/, "") + (full === "closed" ? " · cerrada" : "");
       const X = sx(p) + 9, w = ctx.measureText(txt).width;
       let Y = sy(p) - (full ? 8 : 2);
       // sin pisarse: si choca con una ya puesta, baja un renglón
@@ -679,7 +694,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       }
       placed.push([X, Y, w]);
       ctx.lineWidth = 3; ctx.strokeStyle = "rgba(12,17,22,.85)"; ctx.strokeText(txt, X, Y);
-      ctx.fillStyle = full ? "#9cc6ff" : "#ffb3b3"; ctx.fillText(txt, X, Y);
+      ctx.fillStyle = full === "closed" ? "#9aa3ad" : full ? "#9cc6ff" : "#ffb3b3"; ctx.fillText(txt, X, Y);
     }
 
     compass();
@@ -696,6 +711,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     }
     el.emp.innerHTML = emp + '<small>/' + N + '</small>';
     el.ful.innerHTML = ful + '<small>/' + N + '</small>';
+    el.clo.innerHTML = clo + '<small>/' + N + '</small>';
     const pct = (pos / (NF - 1)) * 100;
     el.scrub.value = String(Math.round(pct));
     el.scrub.style.setProperty("--pct", pct.toFixed(1) + "%");
@@ -723,7 +739,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     ctx.lineTo(sx(c), sy(c)); ctx.lineTo(sx(d), sy(d)); ctx.closePath();
     ctx.fillStyle = fill; ctx.fill();
   }
-  function column(s, h, half, c, full) {
+  function column(s, h, half, c, full, closed) {
     const x = s.x, y = s.y, z = s.z; h += z;
     const B = [[x-half,y-half],[x+half,y-half],[x+half,y+half],[x-half,y+half]];
     // Las CUATRO caras, de atrás a delante. Antes se pintaban dos fijas, y las
@@ -749,6 +765,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
          shade(c, 1.12));
     if (full) {                                 // llena: tapa con borde encendido
       ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = 1.6; ctx.stroke();
+    } else if (closed) {                        // cerrada: tapa discontinua
+      ctx.setLineDash([3, 2]); ctx.strokeStyle = "#8c96a2"; ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([]);
     }
   }
   // Huella: disco en el suelo que crece con las horas de fallo acumuladas en
@@ -776,10 +794,11 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     quad(iso(x-half,y-half,z), iso(x+half,y-half,z), iso(x+half,y+half,z), iso(x-half,y+half,z),
          "rgba(93,107,120,.22)");
   }
-  function emptyMark(s, half) {                 // vacía: la ausencia también se dibuja
+  function emptyMark(s, half, closed) {         // vacía: la ausencia también se dibuja
     const c = iso(s.x, s.y, s.z + 2);
-    ctx.strokeStyle = "var(--empty)"; ctx.strokeStyle = "#e66767"; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.arc(sx(c), sy(c), 3.6, 0, 6.284); ctx.stroke();
+    ctx.strokeStyle = closed ? "#8c96a2" : "#e66767"; ctx.lineWidth = 1.6;
+    if (closed) ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.arc(sx(c), sy(c), 3.6, 0, 6.284); ctx.stroke(); ctx.setLineDash([]);
   }
 
   // --- hover: la tapa de cada columna es el blanco ---
@@ -796,7 +815,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   function placeTip() {
     const s = S[hover], v = Math.round(bikes[hover]), cap = s.c;
     const r = v / (cap || 1);
-    const estado = v <= 0 ? "sin bicis" : v >= cap ? "sin anclajes libres"
+    const estado = !isOpen(F[Math.min(NF - 1, Math.floor(pos))], hover) ? "cerrada o averiada"
+                 : v <= 0 ? "sin bicis" : v >= cap ? "sin anclajes libres"
                  : r < .25 ? "casi vacía" : r > .75 ? "casi llena" : "equilibrada";
     el.tip.innerHTML = '<div class="n">' + s.n + '</div><div class="d">' +
       v + " / " + cap + " bicis · " + estado + "</div>";
