@@ -69,7 +69,7 @@ El cron de visualización va a **minutos impares** para no coincidir con el coll
 - **`ingest_raw.sh [YYYYMMDD ...]`** — la red de seguridad. Si Postgres estuvo caído, el crudo sigue en disco y esto lo reingesta: idempotente, salta ficheros truncados o vacíos, y rellena `fetched_at` desde el nombre del fichero. Estrenado el 2026-08-21 recuperando 3 snapshots perdidos por un `OperationalError` del collector.
 - **`openmeteo.sh <días>` o `<inicio> <fin>`** — rehace huecos de meteo reciente. Con dos fechas usa la API de archivo, que va ~2 días por detrás; para lo más reciente, la forma de días (máx. 92).
 - **`ingest.sh`** — equivalente para el clon git de `dbizi-raw` (`backfill.py`). Solo valor histórico: ese repo está retirado.
-- **`build_timelapse.py`** — genera el timelapse en sus dos variantes (ver más abajo). `fetch_dem.py`, `fetch_ortho.py` y `fetch_river.py` (solo en el repo) bajaron relieve, máscara de mar y río una vez.
+- **`build_timelapse.py`** — genera el timelapse en sus dos variantes (ver más abajo). `fetch_dem.py`, `fetch_ortho.py`, `fetch_river.py` y `fetch_landcover.py` (solo en el repo) bajaron relieve, máscara de mar, río y cobertura del suelo una vez.
 
 ## Tablas (BD `dbizi`, esquema en `sql/schema.sql`)
 
@@ -114,7 +114,7 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi --command='.
 **https://storage.googleapis.com/cosas-con-datos-en-dbizi-viz/index.html** (la raíz sin `/index.html` devuelve el listado XML del bucket, no la página).
 
 - `publish_viz.sh` consulta Postgres, regenera el JSON con ventana de 24 h y lo sube. La página lo recarga cada 2 min y muestra la edad del último dato. El JSON lleva también el **contexto** de la ventana: meteo horaria de `OPENMETEO` (por eso el cron de Open-Meteo pasó de diario a cada 3 h, 2026-08-22), festivos de `holiday` y la última cosecha `~/events/events_*.json.gz` resumida por día.
-- El **relieve** va dentro de la página, no del JSON: `viz/donostia-dem.json` es una rejilla de 195×122 nodos a 50 m con altura (EU-DEM 25 m vía OpenTopoData, `scripts/fetch_dem.py`), máscara de mar (ortofoto PNOA del IGN vía WMS, `scripts/fetch_ortho.py`; necesita Pillow, solo en local) y el Urumea y Santa Clara vectoriales (OpenStreetMap vía Overpass, `scripts/fetch_river.py`). Todo se bajó una vez el 2026-08-22. La página pasa de 26 a 150 KB (37 KB en el cable).
+- El **relieve** va dentro de la página, no del JSON: `viz/donostia-dem.json` es una rejilla de 195×122 nodos a 50 m con altura (EU-DEM 25 m vía OpenTopoData, `scripts/fetch_dem.py`), máscara de mar (ortofoto PNOA del IGN vía WMS, `scripts/fetch_ortho.py`; necesita Pillow, solo en local) el Urumea y Santa Clara vectoriales (OpenStreetMap vía Overpass, `scripts/fetch_river.py`) y la cobertura del suelo y viales principales, también de OSM, como polígonos simplificados y recortados a la maqueta (`scripts/fetch_landcover.py`, 2026-08-23). Lo demás se bajó el 2026-08-22. La página queda en ~290 KB (106 KB en el cable).
 - **La VM no abre ningún puerto.** Postgres sigue en localhost; lo que se publica son ficheros estáticos, así que no hay superficie de ataque nueva. El precio es el retardo del cron: en el peor caso ves algo de hace ~7 min contando el propio muestreo.
 - Todo se sube con `--gzip-local-all`, no `--gzip-in-flight-all`: el primero deja el **objeto** comprimido, el segundo solo el transporte de subida. Página 26 KB → 9,8 KB; JSON 75 KB → 16 KB.
 - `VENTANA_H=48 ~/publish_viz.sh` publica más horas.
