@@ -359,6 +359,11 @@ Sin objetivo analítico — porque sí:
   - Lo que se ve con 28 h de datos: el total de la red apenas oscila un 6%, pero 34 de 70 estaciones tocan el cero y 12 se llenan del todo. La historia es la **redistribución**, no el volumen.
   - Pendiente, y es lo que pedía la idea original: *lunes lluvioso vs. lunes seco* lado a lado. Acotar el `WHERE ts` de la consulta ya permite generar cada día por separado; falta tener dos lunes comparables y la vista doble.
 
+- **Simulador de estación fantasma** (idea 2026-08-24, para cuando haya meses de histórico): el usuario pincha un punto del mapa y se simula cómo funcionaría una estación ahí. Reformulación que lo hace viable: aprender qué hace que las 70 estaciones se comporten como se comportan *en función de su ubicación*, y evaluar esa función en el punto nuevo. Rasgos de ubicación, casi todos ya en la despensa: renta/demografía por barrio (CKAN), altitud y pendiente (el DEM del timelapse), distancias a centro/playas/campus/tren, bidegorris, **frecuencia de bus por corredor (GTFS estático de Dbus)**, presión de parking (`getParkings.xsp`), POIs de OSM.
+  - **v1 «estación gemela»** (sin entrenar nada): k estaciones existentes más parecidas por rasgos → sus perfiles típicos (hora/día-tipo, sensibilidad a lluvia) como pronóstico, con el porqué («se parece a Amara por X»). Visual: una columna fantasma respirando junto a las reales en Txirrin.
+  - **Credibilidad**: validación leave-one-out — predecir cada estación existente desde las otras 69 y publicar el error («acierta el perfil con ±X bicis; toma la nueva con esa sal»).
+  - **Verdades incómodas que la UI debe decir**: n=70 (modelos simples o vecinos, nada de ML fino), vemos disponibilidad y no demanda (la estación vacía no registra los alquileres que no pudieron pasar — demanda censurada), y una estación nueva canibaliza a las vecinas y cambia el rebalanceo (la v1 lo ignora y lo declara).
+
 ## 20. Posicionamiento
 
 > **Estoy construyendo un sistema para estudiar cómo se comporta la red Dbizi de Donostia: un histórico propio de sus estaciones cruzado con meteorología, calendario, eventos e incidencias para detectar patrones, anomalías y posibles explicaciones.**
