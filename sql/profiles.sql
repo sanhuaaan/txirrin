@@ -10,6 +10,8 @@ COPY (
          avg(m.mechanical_available) AS mech,
          avg((m.bikes_available = 0)::int) AS p_empty,
          avg((m.docks_available = 0)::int) AS p_full,
+         avg((m.electric_available = 0 AND m.mechanical_available > 0)::int) AS p_no_elec,
+         avg((m.mechanical_available = 0 AND m.electric_available > 0)::int) AS p_no_mech,
          count(*) AS n
   FROM dbizi_measurement m JOIN dbizi_station s USING (station_id)
   WHERE m.is_installed
