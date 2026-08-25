@@ -296,6 +296,18 @@ Cuando haya histórico y pregunta que lo justifique:
 - **Predicción**: bicis disponibles a +15/+30 min por estación (hora, día, histórico, meteo, eventos, vecinas).
 - **Predicción de saturación**: ¿qué estaciones tienen riesgo de quedarse a 0 (o llenarse) en 30 min? — esto tendría incluso utilidad práctica directa.
 
+### Pendiente: modelos fundacionales de series temporales, zero-shot (cuando haya 2-3 semanas de datos)
+
+Evaluar si Chronos-Bolt / TimesFM / TiRex predicen la ocupación a 1-2 h **sin entrenar nada**, solo con el contexto de las últimas 24-72 h. Todo en el portátil sobre un CSV exportado (torch no cabe en la e2-micro); la VM no se toca.
+
+- **Serie**: `bikes_available` por estación remuestreado a 10 min; predecir ocupación normalizada (0-1) y desnormalizar; recortar cuantiles a `[0, capacidad]`. Descartar ventanas con hueco (`fetched_at`).
+- **Backtest**: ventana deslizante, cada hora en punto × 70 estaciones × N días (~23k predicciones con 2 semanas), horizontes 10/30/60/120 min, separado laborable/finde y por clúster de §8.
+- **Baselines obligatorias**: persistencia (lo que hay ahora), naive estacional (ayer/media laborables a esa hora), perfil + persistencia (valor actual + variación del perfil medio en la próxima hora). Si el fundacional no bate a la tercera, no vale la pena.
+- **Métricas**: MAE de la mediana en bicis por horizonte; cobertura del intervalo p10-p90 (calibración); y la operativa: "vacía en 30 min sí/no" → precisión/recall contra lo ocurrido.
+- **Entregable**: `analysis/forecast_eval.py` (~120 líneas, `pip install chronos-forecasting`), tabla de resultados y un gráfico de una tarde en Bera Bera con el abanico de cuantiles y el real encima.
+- **Segunda ronda** (con meses y lluvia): TimesFM/Moirai con covariables (meteo, festivo). **Producción** solo si la evaluación lo justifica: cron en el portátil que sube un JSON al bucket `-viz` y el timelapse pinta "vacía en 30 min"; Cloud Run como alternativa; nunca la VM.
+- Ventaja del dato: sin rebalanceo del operador (§10) la serie es limpia. Lo que se aprende: a qué horizonte deja de servir, si los cuantiles están calibrados y en qué tipo de estación gana al naive.
+
 ---
 
 ## 14. Stack
