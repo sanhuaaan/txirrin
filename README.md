@@ -229,6 +229,20 @@ Esperado: 12 bicicletas · Real: 2 · Desviación: -10
 
 Esa desviación es la base de la detección de anomalías.
 
+### Primeros resultados (2026-08-25, 5 días de datos)
+
+Perfil 24 h por estación (ocupación normalizada por capacidad, hora local, laborable/finde) y k-means sobre la *forma* de la curva (media restada, 48 puntos). Código: [`sql/profiles.sql`](sql/profiles.sql) → `data/profiles.csv` → [`analysis/profiles.py`](analysis/profiles.py) → `analysis/profiles.png` + `data/profiles_clusters.csv`. Con k=4 y sin darle ninguna información geográfica, el clustering reproduce el mapa funcional de la ciudad:
+
+| Clúster | n | Forma laborable | Finde | Dónde |
+|---|---|---|---|---|
+| C0 destino/centro | 14 | vacía de noche, se llena 7-12 h, pico 19 h | llenado retrasado a mediodía | Bretxa, Andia, Urdaneta, Ayuntamiento, Zabaleta, Gros |
+| C2 residencial | 15 | la inversa: llena de noche, se vacía 7-12 h, mínimo 19 h, vuelve 21-24 h | igual, más suave | Amara, Egia, Intxaurrondo, Antiguo alto (Morlans, Podavines, Herrera, Antzieta, Ametzagaña) |
+| C1 residencial suave / ocio | 18 | ligera bajada diurna | se llenan por la mañana y se vacían a mediodía | Bermingham, Tabakalera, Tranbia, Añorga, Altza |
+| C3 plana / ruidosa | 22 | sin patrón | sin patrón | Ibaeta-campus, Altza kiroldegia, Bera Bera, Errondo |
+| plana (apartada) | 1 | >70 % del tiempo vacía o llena | | Náutico |
+
+Lecturas: la señal residencial/destino ya está en 5 días; C3 es el clúster "trabajo/universidad" que en agosto no existe y debería partirse en octubre (rehacer y comparar es en sí un resultado); C0/C2 son la base para elegir gemelos en el simulador de estación fantasma (§19). Para refrescar: relanzar el `COPY` en la VM, bajar el CSV y ejecutar el script (`python3 analysis/profiles.py [k]`).
+
 ---
 
 ## 9. Detección y explicación de anomalías
@@ -251,7 +265,9 @@ No solo estación a estación: la red completa. Estaciones que se vacían rápid
 
 ### Inferencia de movimientos (especulativa)
 
-Con frecuencia alta de captura se pueden inferir flujos entre estaciones (A pierde 3, B gana 3). Información **inferida, no observada**: la contaminan redistribución del operador, estaciones llenas/vacías y movimientos simultáneos. Si resulta fiable, podría construirse un grafo temporal de movilidad ciclista. No es objetivo del MVP.
+Con frecuencia alta de captura se pueden inferir flujos entre estaciones (A pierde 3, B gana 3). Información **inferida, no observada**: la contaminan redistribución del operador, estaciones llenas/vacías y movimientos simultáneos.
+
+**Redistribución del operador (comprobado 2026-08-25, 5 días):** no hay evidencia de rebalanceo con furgoneta en Dbizi. Saltos de ≥5 bicis en 2 min: 36 en toda la semana (≈5/día en 70 estaciones), sin pares −N/+N entre estaciones ni horario fijo; los saltos de ±3-4 se concentran a las 16-21 h (grupos de usuarios). Los de madrugada son 1-2 en la semana. Conclusión provisional: las bicis van donde las llevan los usuarios y solo hay retirada de averiadas (`vehicles_disabled`), lo que hace más relevante el flujo neto vs. altitud (§18). Si resulta fiable, podría construirse un grafo temporal de movilidad ciclista. No es objetivo del MVP.
 
 ---
 
