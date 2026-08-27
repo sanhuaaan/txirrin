@@ -119,6 +119,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
        background:var(--ink); border:none; cursor:grab}
 #scrub::-moz-range-thumb{width:15px; height:15px; border-radius:50%; background:var(--ink); border:none}
 #scrub:focus-visible{outline:2px solid var(--ink); outline-offset:5px}
+#rate{min-width:60px; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
 #speed{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-2); min-width:96px}
 
 /* ---- tooltip ---- */
@@ -134,6 +135,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   #legend{bottom:calc(var(--space) + 66px); max-width:200px}
   .sub{display:none}
   button{min-width:76px}
+  #rate{min-width:52px}
   #speed{display:none}
 }
 @media (prefers-reduced-motion:reduce){ #tip{transition:none} }
@@ -184,11 +186,13 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <p class="lgd-note">Los dos extremos son fallos: no hay bici que coger, o no
     hay dónde dejarla. <b>El equilibrio es lo silencioso.</b></p>
   <p class="lgd-note"><b>Arrastra</b> gira e inclina · <b>rueda</b> acerca ·
-    <b>shift+arrastra</b> mueve · <b>doble clic</b> reinicia la vista</p>
+    <b>shift+arrastra</b> mueve · <b>doble clic</b> reinicia la vista ·
+    <b>← →</b> 5 min (<b>shift</b>: 1 h) · <b>×1</b> cambia la velocidad</p>
 </div>
 
 <div class="overlay" id="ctl">
   <button id="play" aria-label="Reproducir o pausar el timelapse">Reproducir</button>
+  <button id="rate" aria-label="Velocidad de reproducción" title="Velocidad: un día en 37 s, 9 s o 3 s">×1</button>
   <div id="track">
     <canvas id="strip" height="28" aria-hidden="true"></canvas>
     <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
@@ -378,14 +382,15 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
 
   // --- estado ---
   let pos = 0, playing = false, last = 0;
-  const SPF = 130;                              // ms por frame de 5 min
+  const SPF = 130;                              // ms por frame de 5 min a ×1
+  const RATES = [1, 4, 12]; let rate = 0;       // ×12: el día entero en 3 s, se ve el vaivén mediodía/noche
   const el = { time: document.getElementById("time"), day: document.getElementById("day"),
                tot: document.getElementById("s-tot"), trips: document.getElementById("s-trips"),
                tripsRow: document.getElementById("s-trips-row"), since: document.getElementById("s-since"),
                dis: document.getElementById("s-dis"), disRow: document.getElementById("s-dis-row"), emp: document.getElementById("s-emp"),
                ful: document.getElementById("s-ful"), scrub: document.getElementById("scrub"),
                live: document.getElementById("s-live"), age: document.getElementById("s-age"),
-               play: document.getElementById("play"), speed: document.getElementById("speed"),
+               play: document.getElementById("play"), rate: document.getElementById("rate"), speed: document.getElementById("speed"),
                tip: document.getElementById("tip"), wx: document.getElementById("wx"),
                ev: document.getElementById("ev"), evn: document.getElementById("ev-n"),
                evc: document.getElementById("ev-counts"), evl: document.getElementById("ev-list"),
@@ -1024,12 +1029,13 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   function tick(now) {
     if (!playing) return;
     const dt = now - last; last = now;
-    pos += dt / SPF;
+    pos += dt * RATES[rate] / SPF;
     if (!(pos >= 0) || pos >= NF - 1) { pos = 0; }   // también si el reloj dio NaN
     draw();
     requestAnimationFrame(tick);
   }
   el.play.addEventListener("click", () => setPlaying(!playing));
+  el.rate.addEventListener("click", () => { rate = (rate + 1) % RATES.length; el.rate.textContent = "×" + RATES[rate]; });
   el.scrub.addEventListener("input", () => {
     setPlaying(false);
     pos = (+el.scrub.value / 100) * (NF - 1);
@@ -1038,8 +1044,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   addEventListener("keydown", (e) => {
     if (dlg.open) return;                       // con el modal abierto, los atajos no
     if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
-    else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+1); draw(); }
-    else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-1); draw(); }
+    else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+(e.shiftKey ? 12 : 1)); draw(); }   // shift: una hora
+    else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-(e.shiftKey ? 12 : 1)); draw(); }
     else if (e.key === "[") { setRot(rot - Math.PI / 12); draw(); }
     else if (e.key === "]") { setRot(rot + Math.PI / 12); draw(); }
     else if (e.key === "+" || e.key === "=") { zoomAt(zoom * 1.25, W / 2, H / 2); draw(); }
