@@ -119,7 +119,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
        background:var(--ink); border:none; cursor:grab}
 #scrub::-moz-range-thumb{width:15px; height:15px; border-radius:50%; background:var(--ink); border:none}
 #scrub:focus-visible{outline:2px solid var(--ink); outline-offset:5px}
-#rate{min-width:60px; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+#rate{min-width:72px; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
 #speed{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-2); min-width:96px}
 
 /* ---- tooltip ---- */
@@ -187,12 +187,12 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
     hay dónde dejarla. <b>El equilibrio es lo silencioso.</b></p>
   <p class="lgd-note"><b>Arrastra</b> gira e inclina · <b>rueda</b> acerca ·
     <b>shift+arrastra</b> mueve · <b>doble clic</b> reinicia la vista ·
-    <b>← →</b> 5 min (<b>shift</b>: 1 h) · <b>×1</b> cambia la velocidad</p>
+    <b>← →</b> un frame (<b>shift</b>: 1 h) · <b>5 min</b> cambia el paso entre frames</p>
 </div>
 
 <div class="overlay" id="ctl">
   <button id="play" aria-label="Reproducir o pausar el timelapse">Reproducir</button>
-  <button id="rate" aria-label="Velocidad de reproducción" title="Velocidad: un día en 37 s, 9 s o 3 s">×1</button>
+  <button id="rate" aria-label="Paso entre frames" title="Paso: con menos frames las barras deslizan en vez de temblar">5 min</button>
   <div id="track">
     <canvas id="strip" height="28" aria-hidden="true"></canvas>
     <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
@@ -228,7 +228,12 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     }
   }
   const S = DATA.stations, POLYS = DATA.polys;
-  let F = DATA.frames;
+  const STEPS = [1, 6, 12]; let step = 0;      // frames de 5 min por paso: 5 min, 30 min, 1 h
+  let RAW = DATA.frames;
+  // menos frames = menos ruido de 2 min y la interpolación desliza las barras;
+  // el último frame siempre entra para no perder el directo
+  const thin = () => RAW.filter((_, i) => i % STEPS[step] === 0 || i === RAW.length - 1);
+  let F = thin();
   const N = S.length;
   let NF = F.length;
   let HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
@@ -382,8 +387,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
 
   // --- estado ---
   let pos = 0, playing = false, last = 0;
-  const SPF = 130;                              // ms por frame de 5 min a ×1
-  const RATES = [1, 4, 12]; let rate = 0;       // ×12: el día entero en 3 s, se ve el vaivén mediodía/noche
+  const SPF = 130;                              // ms por frame de 5 min; el día dura lo mismo con cualquier paso
   const el = { time: document.getElementById("time"), day: document.getElementById("day"),
                tot: document.getElementById("s-tot"), trips: document.getElementById("s-trips"),
                tripsRow: document.getElementById("s-trips-row"), since: document.getElementById("s-since"),
@@ -1029,23 +1033,38 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   function tick(now) {
     if (!playing) return;
     const dt = now - last; last = now;
-    pos += dt * RATES[rate] / SPF;
+    pos += dt / (SPF * STEPS[step]);
     if (!(pos >= 0) || pos >= NF - 1) { pos = 0; }   // también si el reloj dio NaN
     draw();
     requestAnimationFrame(tick);
   }
   el.play.addEventListener("click", () => setPlaying(!playing));
-  el.rate.addEventListener("click", () => { rate = (rate + 1) % RATES.length; el.rate.textContent = "×" + RATES[rate]; });
+  function setFrames(frames) {                  // cambia de frames conservando el instante que se veía
+    const seen = F[Math.min(NF - 1, Math.round(pos))].t, atEdge = pos >= NF - 1.01;
+    RAW = frames; F = thin(); NF = F.length; accumulate();
+    shownDay = ""; strip();
+    HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
+    setHours();
+    if (atEdge) pos = NF - 1;
+    else { const i = F.findIndex(f => f.t >= seen); pos = i < 0 ? NF - 1 : i; }
+    draw();
+  }
+  el.rate.addEventListener("click", () => {
+    step = (step + 1) % STEPS.length;
+    el.rate.textContent = ["5 min", "30 min", "1 h"][step];
+    setFrames(RAW);
+  });
   el.scrub.addEventListener("input", () => {
     setPlaying(false);
     pos = (+el.scrub.value / 100) * (NF - 1);
     draw();
   });
+  const HOUR = () => Math.max(1, 12 / STEPS[step]);   // frames que caben en una hora
   addEventListener("keydown", (e) => {
     if (dlg.open) return;                       // con el modal abierto, los atajos no
     if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
-    else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+(e.shiftKey ? 12 : 1)); draw(); }   // shift: una hora
-    else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-(e.shiftKey ? 12 : 1)); draw(); }
+    else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+(e.shiftKey ? HOUR() : 1)); draw(); }   // shift: una hora
+    else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-(e.shiftKey ? HOUR() : 1)); draw(); }
     else if (e.key === "[") { setRot(rot - Math.PI / 12); draw(); }
     else if (e.key === "]") { setRot(rot + Math.PI / 12); draw(); }
     else if (e.key === "+" || e.key === "=") { zoomAt(zoom * 1.25, W / 2, H / 2); draw(); }
@@ -1063,15 +1082,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     if (fresh.stations.length !== N || fresh.stations.some((s, i) => s.id !== S[i].id)) {
       location.reload(); return;                          // cambió la red: recarga limpia
     }
-    const atEdge = pos >= NF - 1.01;                      // ¿estaba mirando el directo?
-    const seen = F[Math.min(NF - 1, Math.round(pos))].t;
-    F = fresh.frames; NF = F.length; accumulate();
-    CTX = fresh.context || {}; shownDay = ""; strip();
-    HOURS = ((new Date(F[NF - 1].t + "Z") - new Date(F[0].t + "Z")) / 36e5).toFixed(0);
-    setHours();
-    if (atEdge) pos = NF - 1;
-    else { const i = F.findIndex(f => f.t >= seen); pos = i < 0 ? NF - 1 : i; }
-    draw();
+    CTX = fresh.context || {};
+    setFrames(fresh.frames);
   }
   if (SRC && REFRESH_MS > 0) setInterval(refresh, REFRESH_MS);
 
