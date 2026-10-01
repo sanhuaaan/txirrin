@@ -296,9 +296,23 @@ Cuando haya histórico y pregunta que lo justifique:
 - **Predicción**: bicis disponibles a +15/+30 min por estación (hora, día, histórico, meteo, eventos, vecinas).
 - **Predicción de saturación**: ¿qué estaciones tienen riesgo de quedarse a 0 (o llenarse) en 30 min? — esto tendría incluso utilidad práctica directa.
 
-### Pendiente: modelos fundacionales de series temporales, zero-shot (cuando haya 2-3 semanas de datos)
+### Hecho (2026-10-01): modelos fundacionales de series temporales, zero-shot
 
-Evaluar si Chronos-Bolt / TimesFM / TiRex predicen la ocupación a 1-2 h **sin entrenar nada**, solo con el contexto de las últimas 24-72 h. Todo en el portátil sobre un CSV exportado (torch no cabe en la e2-micro); la VM no se toca.
+Evaluado TimesFM 3.0 (200M, CPU del portátil, venv `uv` con Python 3.11) sobre 6 semanas de datos:
+backtest de 184 orígenes cada 3 h en las semanas lectivas de septiembre, 70 estaciones, series a 15 min,
+contexto de 4 días, horizonte 2 h, contra persistencia / naive 24 h / perfil+persistencia.
+Resultados en `analysis/forecast_eval.md` (script `analysis/forecast_eval.py`, export `sql/forecast_series.sql`):
+
+- **MAE**: TimesFM 0,93 / 1,37 / 2,00 bicis a 30 min / 1 h / 2 h; la persistencia 0,94 / 1,39 / 2,11.
+  Empate a corto, ~5 % de ventaja a 2 h. Perfil y naive 24 h, claramente peor.
+- **Calibración**: cobertura p10-p90 de 0,79 (objetivo 0,80) sin haber visto jamás la red. Es el valor real.
+- **"Vacía en 30 min"** sobre transiciones (no estaba vacía en el origen): la mediana solo caza el 4 %;
+  la alarma por cuantil bajo (q10 <= 0,5) recupera el **64 % con precisión 0,24** — el umbral es un mando
+  recall/ruido que ningún baseline tiene.
+
+Conclusión: el punto no justifica producción; la banda sí justifica una segunda ronda.
+
+El plan original, para contexto:
 
 - **Serie**: `bikes_available` por estación remuestreado a 10 min; predecir ocupación normalizada (0-1) y desnormalizar; recortar cuantiles a `[0, capacidad]`. Descartar ventanas con hueco (`fetched_at`).
 - **Backtest**: ventana deslizante, cada hora en punto × 70 estaciones × N días (~23k predicciones con 2 semanas), horizontes 10/30/60/120 min, separado laborable/finde y por clúster de §8.
