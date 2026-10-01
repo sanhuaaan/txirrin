@@ -165,6 +165,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:#e6c56b"></span>Cerradas</span><span class="v" id="s-clo">—<small>/70</small></span></div>
+  <div class="stat" id="s-risk-row" hidden style="cursor:pointer" title="Ir al directo para ver cuáles"><span class="k"><span class="dot" style="background:#e6a23c"></span>Riesgo de vaciarse <small>(ahora +30 min)</small></span><span class="v" id="s-risk">—</span></div>
   <div class="stat" id="s-dis-row" hidden title="Bicis ancladas que el sistema da por averiadas: ocupan anclaje y no se pueden coger."><span class="k"><span class="dot" style="background:#5a3d3d"></span>Bicis averiadas</span><span class="v" id="s-dis">—</span></div>
   <button id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5.5 1.5v3M10.5 1.5v3"/></svg>
@@ -184,7 +185,10 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div id="ramp"></div>
   <div class="lgd-ends"><span>sin bicis</span><span>equilibrada</span><span>sin sitio</span></div>
   <p class="lgd-note">Los dos extremos son fallos: no hay bici que coger, o no
-    hay dónde dejarla. <b>El equilibrio es lo silencioso.</b></p>
+    hay dónde dejarla. <b>El equilibrio es lo silencioso.</b>
+    En el <b>directo</b> (el final de la barra de tiempo), un <b>anillo ámbar</b>
+    marca las estaciones con riesgo de quedarse sin bicis en la próxima media hora
+    (predicción, acierta 1 de cada 4 avisos). El contador del panel lleva al directo.</p>
   <p class="lgd-note"><b>Arrastra</b> gira e inclina · <b>rueda</b> acerca ·
     <b>shift+arrastra</b> mueve · <b>doble clic</b> reinicia la vista ·
     <b>← →</b> un frame (<b>shift</b>: 1 h) · <b>5 min</b> cambia el paso entre frames</p>
@@ -218,6 +222,18 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     if (!r.ok) throw new Error("HTTP " + r.status);
     return r.json();
   };
+  // capa de riesgo: risk.json lo sube el forecaster desde el portátil; si no
+  // es fresco (<25 min) no se pinta — portátil apagado = capa fuera, sin error
+  let RISK = null;
+  const riskSet = () => {
+    if (!SRC || !RISK || Date.now() - new Date(RISK.at) > 25 * 60e3) return null;
+    return RISK._set || (RISK._set = new Set(RISK.risk.map(r => r.id)));
+  };
+  async function loadRisk() {
+    try { const r = await fetch("risk.json?t=" + Date.now(), { cache: "no-store" });
+          if (r.ok) { RISK = await r.json(); draw(); } } catch (e) {}
+  }
+
   let DATA = EMBEDDED;
   if (!DATA) {
     try { DATA = await load(); }
@@ -399,6 +415,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                ev: document.getElementById("ev"), evn: document.getElementById("ev-n"),
                evc: document.getElementById("ev-counts"), evl: document.getElementById("ev-list"),
                strip: document.getElementById("strip"), clo: document.getElementById("s-clo"),
+               risk: document.getElementById("s-risk"), riskRow: document.getElementById("s-risk-row"),
                shut: document.getElementById("shut") };
   const CLOSED = hex("#c9a94f");                // cerrada o averiada: ámbar, fuera de la rampa
   const isOpen = (fr, i) => !fr.o || fr.o[i] === "1";
@@ -727,6 +744,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     ctx.drawImage(tcv, 0, 0, W, H);
 
     const half = SIDE / 2, labels = [];
+    const rset = riskSet();
     let tot = 0, emp = 0, ful = 0, clo = 0, dis = 0;
     for (let i = 0; i < N; i++) if (!isOpen(fr, i)) clo++;
     const shut = clo >= N * 0.9;                // cierra la red entera (00-06 h): se dice una vez
@@ -747,10 +765,13 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       // ruido); solo en el tooltip y en el total del panel
       if (fr.d) dis += fr.d[i];
       occlude(s, h, half);
+      if (rset && open && rset.has(s.id) && pos >= NF - 1.01) riskRing(s, h);  // solo en el directo: en el histórico confunde
       if (!open) { if (!shut) labels.push([i, h, "closed"]); }
       else if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
     }
     el.shut.hidden = !shut;
+    el.riskRow.hidden = !rset;
+    if (rset) el.risk.textContent = rset.size;
     venues(fr);
     // etiquetas solo de las que fallan ahora, encima de todo
     ctx.font = '500 10px "IBM Plex Sans", sans-serif'; ctx.textAlign = "left"; ctx.textBaseline = "middle";
@@ -913,6 +934,11 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     quad(iso(x-half,y-half,z), iso(x+half,y-half,z), iso(x+half,y+half,z), iso(x-half,y+half,z),
          "rgba(93,107,120,.22)");
   }
+  function riskRing(s, h) {                     // ámbar: puede vaciarse en ~30 min
+    const c = iso(s.x, s.y, s.z + h + 14);
+    ctx.strokeStyle = "#e6a23c"; ctx.lineWidth = 1.8; ctx.setLineDash([3, 2.5]);
+    ctx.beginPath(); ctx.arc(sx(c), sy(c), 6, 0, 6.284); ctx.stroke(); ctx.setLineDash([]);
+  }
   function emptyMark(s, half, closed) {         // vacía: la ausencia también se dibuja
     const c = iso(s.x, s.y, s.z + 2);
     ctx.strokeStyle = closed ? "#e6c56b" : "#e66767"; ctx.lineWidth = 1.6;
@@ -934,12 +960,14 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   function placeTip() {
     const s = S[hover], v = Math.round(bikes[hover]), cap = s.c;
     const r = v / (cap || 1);
+    const rs = riskSet(), enRiesgo = rs && pos >= NF - 1.01 && rs.has(s.id);
     const estado = !isOpen(F[Math.min(NF - 1, Math.floor(pos))], hover) ? "cerrada o averiada"
                  : v <= 0 ? "sin bicis" : v >= cap ? "sin anclajes libres"
                  : r < .25 ? "casi vacía" : r > .75 ? "casi llena" : "equilibrada";
     const fd = F[Math.min(NF - 1, Math.floor(pos))].d, nd = fd ? fd[hover] : 0;
     el.tip.innerHTML = '<div class="n">' + s.n + '</div><div class="d">' +
-      v + " / " + cap + " bicis" + (nd ? " (+ " + nd + (nd > 1 ? " averiadas)" : " averiada)") : "") + " · " + estado + "</div>";
+      v + " / " + cap + " bicis" + (nd ? " (+ " + nd + (nd > 1 ? " averiadas)" : " averiada)") : "") + " · " + estado +
+      (enRiesgo ? '<br>ahora: riesgo de quedarse sin bicis en ~30 min' : "") + "</div>";
     el.tip.style.left = mx + "px";
     el.tip.style.top = (my - 14) + "px";
     el.tip.style.opacity = "1";
@@ -1039,6 +1067,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     requestAnimationFrame(tick);
   }
   el.play.addEventListener("click", () => setPlaying(!playing));
+  el.riskRow.addEventListener("click", () => { setPlaying(false); pos = NF - 1; draw(); });
   function setFrames(frames) {                  // cambia de frames conservando el instante que se veía
     const seen = F[Math.min(NF - 1, Math.round(pos))].t, atEdge = pos >= NF - 1.01;
     RAW = frames; F = thin(); NF = F.length; accumulate();
@@ -1086,6 +1115,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     setFrames(fresh.frames);
   }
   if (SRC && REFRESH_MS > 0) setInterval(refresh, REFRESH_MS);
+  if (SRC) { loadRisk(); setInterval(loadRisk, 120000); }
 
   resize();
   if (!reduce) setPlaying(true);

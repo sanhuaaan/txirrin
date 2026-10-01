@@ -1,0 +1,8 @@
+[Unit]
+Description=Txirrin: prediccion de riesgo de vaciado para el timelapse
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jsanjuan/workspace/txirrin
+ExecStart=/home/jsanjuan/workspace/txirrin/.venv/bin/python scripts/risk_forecast.py
+Nice=10
