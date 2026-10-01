@@ -415,3 +415,55 @@ Sin objetivo analítico — porque sí:
 > **Estoy construyendo un sistema para estudiar cómo se comporta la red Dbizi de Donostia: un histórico propio de sus estaciones cruzado con meteorología, calendario, eventos e incidencias para detectar patrones, anomalías y posibles explicaciones.**
 
 La ausencia de datos de tráfico no bloquea el proyecto; si algún día vuelven a publicarse, se incorporan como una dimensión más. El proyecto empieza como **laboratorio de movilidad ciclista** y puede crecer hacia un análisis más amplio de movilidad urbana.
+
+---
+
+## 21. Cuaderno de a bordo
+
+La vista única de qué se ha analizado, qué corre solo y qué espera. Cada análisis
+tiene su informe completo en `analysis/`.
+
+### Hecho
+
+| fecha | pregunta | veredicto | informe |
+|---|---|---|---|
+| 2026-08-25 | ¿Hay rebalanceo del operador? | No: la serie es comportamiento puro de usuarios (§10) | — |
+| 2026-08-25 | ¿Qué personalidad tiene cada estación? | 4 clusters: el mapa funcional de la ciudad emerge solo (§8) | `profiles.py` |
+| 2026-08-25 | ¿Funciona bien el servicio? | Periferia alta >50 % vacía por las tardes; centro saturado al mediodía; eléctricas ausentes en el llano | `service_level.md` |
+| 2026-09-14 | ¿Se nota el inicio de curso? | Sí: +3 % viajes laborables, red más vaciada de día, despierta el corredor universitario | `curso.md` |
+| 2026-10-01 | ¿Predice un modelo fundacional zero-shot? | Empata con la persistencia en MAE; su valor es la banda p10-p90 calibrada (0.79/0.80) | `forecast_eval.md` |
+| 2026-10-01 | ¿Se pueden trazar viajes de madrugada? | 24 viajes validados (13 km/h, r=0.84); la madrugada solo existe el finde — la vuelta de fiesta es medible | `night_trips.md` |
+| 2026-10-01 | ¿Hasta dónde llega la alarma de vaciado? | Techo de precisión ~0.25 con recall útil; por cluster no aporta; de noche inútil | `alarm_tuning.md` |
+
+### Corriendo solo (todo dentro de la VM gratuita)
+
+- **Collector**: snapshot GBFS cada 2 min a Postgres, sin un día perdido desde el 2026-08-20.
+- **Contexto**: meteo horaria (Open-Meteo), festivos y cosecha de eventos.
+- **Timelapse**: `data.json` cada 5 min al bucket; la web con paso 5 min/30 min/1 h.
+
+**Principio vigente**: en producción solo lo que quepa en la e2-micro gratuita.
+El portátil vale para análisis puntuales, no para servicios.
+
+### En el cajón, para un hipotético upgrade del sistema
+
+- **Capa de riesgo "vacía en 30 min"** (construida y probada el 2026-10-01, parada
+  por decisión de infra): `scripts/risk_forecast.py` + unidades systemd
+  (`txirrin-risk.{service,timer}`) corren TimesFM cada 15 min (7-20 h) y suben
+  `risk.json`; el timelapse pinta anillos ámbar en el directo y se auto-apaga si
+  el JSON caduca (>25 min). Necesita ~2 GB de RAM para torch: no cabe en la
+  e2-micro. Candidatos de upgrade: VM mayor, Cloud Run por invocación, o
+  cualquier máquina siempre encendida. Reactivar en un portátil:
+  `systemctl --user enable --now txirrin-risk.timer`. Cada pasada deja línea en
+  `data/risk_log.jsonl` para auditar la precisión real en producción.
+
+### Cola de experimentos (y a qué dato espera cada uno)
+
+| experimento | espera a | cuándo |
+|---|---|---|
+| **Reparto óptimo, etapa 1**: tiempo fuera de banda por estación × día-tipo × hora (§18, [`reparto-optimo.md`](reparto-optimo.md)) | nada — pedía 3-4 semanas y hay 6 | **lista ya** |
+| Elasticidad a la lluvia | días mojados y secos comparables de otoño | finales de octubre |
+| Matriz origen-destino estadística (prior de distancia) | más sábados acumulados | noviembre |
+| Clustering estacional (re-retrato de la ciudad) | otoño completo en la base | noviembre |
+| Forecast 2ª ronda: covariables (lluvia, hora, festivo) + más cuantiles | lo mismo que la lluvia | noviembre |
+| Auditoría real de la alarma (`risk_log.jsonl` vs base) | que la capa vuelva a correr unas semanas | tras el upgrade |
+| Reparto óptimo, etapa 3 (deriva descensurada con covariables) y etapa 4 (colocación + ruta) | un par de meses de datos y meteo variada; la etapa 2 ya está resuelta (no hay camión, §10) | noviembre en adelante |
