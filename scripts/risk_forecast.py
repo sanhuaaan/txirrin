@@ -64,4 +64,10 @@ outp = list(model.predict_batch([wide[c].to_numpy(dtype=np.float32) for c in col
 risk = [{"id": str(c), "q10": round(float(o.quantiles[HSTEP - 1, 0]), 1), "bikes": round(float(cur[c]), 1)}
         for c, o in zip(cols, outp) if o.quantiles[HSTEP - 1, 0] <= 0.5]
 publish(risk)
+
+# expediente: una línea JSONL por pasada (avisos + universo evaluado), para
+# medir la precisión REAL en producción contra lo que luego diga la base de la VM
+with open("data/risk_log.jsonl", "a") as f:
+    f.write(json.dumps({"at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "evaluated": [str(c) for c in cols], "risk": risk}) + "\n")
 print(f"{len(cols)} estaciones evaluadas, {len(risk)} en riesgo: {[r['id'] for r in risk]}")
