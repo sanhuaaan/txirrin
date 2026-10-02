@@ -462,6 +462,7 @@ El portátil vale para análisis puntuales, no para servicios.
 |---|---|---|
 | **Reparto óptimo, etapa 1**: tiempo fuera de banda por estación × día-tipo × hora (§18, [`reparto-optimo.md`](reparto-optimo.md)) | nada — pedía 3-4 semanas y hay 6 | **lista ya** |
 | Elasticidad a la lluvia | días mojados y secos comparables de otoño | finales de octubre |
+| **Pintxo-pote, segunda pasada** (`analysis/pintxopote.py`): confirmar el jueves de Gros (Gran Vía + Bermingham ×1.5), el miércoles de Pio Baroja/Txapillo y el lunes de Sagastieder con el doble de semanas, y validación nativa del mapa | más ocurrencias de cada día de la semana (ahora solo ~6) | finales de octubre |
 | Matriz origen-destino estadística (prior de distancia) | más sábados acumulados | noviembre |
 | Clustering estacional (re-retrato de la ciudad) | otoño completo en la base | noviembre |
 | Forecast 2ª ronda: covariables (lluvia, hora, festivo) + más cuantiles | lo mismo que la lluvia | noviembre |
