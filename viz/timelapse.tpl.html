@@ -122,6 +122,14 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 #rate{min-width:72px; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
 #speed{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-2); min-width:96px}
 
+/* ---- modo historia ---- */
+#story-card{position:absolute; left:50%; transform:translateX(-50%);
+  bottom:calc(var(--space) + 104px); z-index:8; max-width:520px; width:calc(100% - 2*var(--space));
+  background:var(--panel); border:1px solid var(--line); border-radius:4px;
+  padding:12px 16px; box-shadow:0 14px 40px rgba(0,0,0,.55); pointer-events:none}
+#story-card .sc-t{font-family:"IBM Plex Mono",monospace; font-size:12px; color:#e6a23c; margin-bottom:4px}
+#story-card .sc-x{font-size:13.5px; line-height:1.5; color:var(--ink)}
+
 /* ---- tooltip ---- */
 #tip{position:fixed; pointer-events:none; opacity:0; transform:translate(-50%,-100%);
      background:var(--panel); border:1px solid var(--line); border-radius:3px;
@@ -195,13 +203,17 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 </div>
 
 <div class="overlay" id="ctl">
-  <button id="play" aria-label="Reproducir o pausar el timelapse">Reproducir</button>
+  <button id="play" aria-label="Reproducir o pausar el día narrado" title="El día narrado: lo que seis semanas de datos han enseñado">Reproducir</button>
   <button id="rate" aria-label="Paso entre frames" title="Paso: con menos frames las barras deslizan en vez de temblar">5 min</button>
   <div id="track">
     <canvas id="strip" height="28" aria-hidden="true"></canvas>
     <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
   </div>
   <span id="speed"></span>
+</div>
+
+<div id="story-card" role="status" aria-live="polite" hidden>
+  <div class="sc-t"></div><div class="sc-x"></div>
 </div>
 
 <div id="tip" role="status" aria-live="polite"></div>
@@ -401,6 +413,55 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       const c = ramp(i / 20); return `rgb(${c[0]},${c[1]},${c[2]}) ${i * 5}%`;
     }).join(",") + ")";
 
+  // --- modo historia: el dia narrado con lo que ensenaron 6 semanas de datos ---
+  const STORY = [
+    {m: 4*60+30, dow: null, t: "La red cierra de 00:00 a 06:00. Entre semana la ciudad duerme de verdad; las únicas madrugadas con movimiento son las de sábado y domingo — la vuelta de la fiesta, medida a 13 km/h.", s: []},
+    {m: 7*60+15, dow: [0,1,2,3,4], t: "Los barrios altos empiezan a bajar: la periferia se vacía hacia el llano cuesta abajo.", s: ["64","63"]},
+    {m: 8*60+50, dow: [0,1,2,3,4], t: "Hora punta. Desde que empezó el curso, el corredor universitario se llena a las 9: la gente llega en bici al campus.", s: ["40","41"]},
+    {m: 10*60, dow: [1], t: "Martes: toda la mañana llegan bicis al polo escolar-deportivo de Andoain kalea (×2.6 sobre lo normal). Aún no sabemos qué es — a las 14:00 se irán todos a la vez.", s: ["37"]},
+    {m: 13*60, dow: [0,1,2,3,4], t: "Mediodía: el centro se satura. Kristina Infanta y Andia rozan el lleno — cuesta encontrar un anclaje libre.", s: ["38","4"]},
+    {m: 14*60, dow: [1], t: "Las 14:00 del martes: salida en masa en Andoain kalea. Fin de la actividad matinal misteriosa.", s: ["37"]},
+    {m: 17*60+30, dow: [0,1,2,3,4], t: "La tarde castiga la periferia alta: Bera Bera o Altza pasan horas enteras sin una sola bici.", s: ["63","64"]},
+    {m: 19*60, dow: [0,1,2,3,4], t: "Las eléctricas se agotan en el llano: en Iparragirre y Zabaleta es habitual quedarse solo con mecánicas — o con nada.", s: ["11","76"]},
+    {m: 19*60+30, dow: [4], t: "Viernes por la tarde: la red entera sube un 20 %, y Benta Berri — con sus bares universitarios — tiene además fiesta propia.", s: ["40","41","42"]},
+    {m: 20*60, dow: [3], t: "Jueves, 20:00: juevintxo en Gros. Las bicis llegan a Gran Vía y Bermingham… y no se moverán hasta las 23.", s: ["12","14"]},
+    {m: 20*60+10, dow: [2], t: "Miércoles, 20:00: clase en el kiroldegia de Pio Baroja. Llegan ahora; a las 21:00, todos fuera. Una hora exacta — esto no es un bar.", s: ["70"]},
+    {m: 21*60, dow: [0], t: "Lunes, 21:00: actividad semanal en Sagastieder (Intxaurrondo) — llegan a las 21, salen a las 22. Kultur etxea o calistenia; las bicis no distinguen.", s: ["17"]},
+    {m: 12*60+30, dow: [5], t: "Sábado a mediodía: los barrios salen a la calle — Berio y Herrera se vacían de golpe.", s: ["42","53"]},
+    {m: 22*60, dow: [5], t: "Sábado noche: Herrera se enciende. Mañana de madrugada las bicis contarán la vuelta a casa.", s: ["53"]},
+    {m: 9*60+30, dow: [6], t: "Domingo por la mañana: la ciudad baja en bici a Ondarreta. El rito semanal más consistente de todos: 6 de 6 semanas.", s: ["69"]},
+    {m: 12*60+45, dow: [6], t: "Mediodía de domingo: vermú en Gros — las llegadas se amontonan junto a la Zurriola.", s: ["76"]},
+    {m: 17*60, dow: [6], t: "Tarde de domingo: el gran paseo. Solo el Ayuntamiento mueve ~90 bicis entre llegadas y salidas.", s: ["47"]},
+  ];
+  const fDowF = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Madrid", weekday: "short" });
+  const DOWN = { Mon:0, Tue:1, Wed:2, Thu:3, Fri:4, Sat:5, Sun:6 };
+  let storyQ = null, storyIdx = 0, holdUntil = 0, storyRings = null;
+  function frameLocal(i) {
+    const d = new Date(F[i].t + "Z");
+    const [hh, mm] = fTime.format(d).split(":");
+    return { min: (+hh) * 60 + (+mm), dow: DOWN[fDowF.format(d)] };
+  }
+  function buildStory() {
+    const q = [];
+    for (const b of STORY) {
+      for (let i = 0; i < NF; i++) {
+        const fl = frameLocal(i);
+        if ((b.dow === null || b.dow.includes(fl.dow)) && fl.min >= b.m && fl.min - b.m < 30) {
+          q.push({ frame: i, b }); break;
+        }
+      }
+    }
+    return q.sort((a, c) => a.frame - c.frame);
+  }
+  function endStory() {
+    storyQ = null; storyRings = null; card.hidden = true;
+  }
+  function syncStory() {                        // el guion sigue a pos: siguiente escena pendiente
+    storyQ = buildStory(); storyRings = null; card.hidden = true;
+    storyIdx = storyQ.findIndex(q => q.frame > pos);
+    if (storyIdx < 0) storyIdx = storyQ.length;
+  }
+
   // --- estado ---
   let pos = 0, playing = false, last = 0;
   const SPF = 130;                              // ms por frame de 5 min; el día dura lo mismo con cualquier paso
@@ -417,6 +478,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                strip: document.getElementById("strip"), clo: document.getElementById("s-clo"),
                risk: document.getElementById("s-risk"), riskRow: document.getElementById("s-risk-row"),
                shut: document.getElementById("shut") };
+  const card = document.getElementById("story-card");
   const CLOSED = hex("#c9a94f");                // cerrada o averiada: ámbar, fuera de la rampa
   const isOpen = (fr, i) => !fr.o || fr.o[i] === "1";
   let CTX = DATA.context || {};
@@ -766,6 +828,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       if (fr.d) dis += fr.d[i];
       occlude(s, h, half);
       if (rset && open && rset.has(s.id) && pos >= NF - 1.01) riskRing(s, h);  // solo en el directo: en el histórico confunde
+      if (storyRings && storyRings.has(s.id) && performance.now() < holdUntil) storyRing(s, h);
       if (!open) { if (!shut) labels.push([i, h, "closed"]); }
       else if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
     }
@@ -934,6 +997,11 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     quad(iso(x-half,y-half,z), iso(x+half,y-half,z), iso(x+half,y+half,z), iso(x-half,y+half,z),
          "rgba(93,107,120,.22)");
   }
+  function storyRing(s, h) {                    // azul: protagonista del rótulo en curso
+    const c = iso(s.x, s.y, s.z + h + 14);
+    ctx.strokeStyle = "#7fd4ff"; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.arc(sx(c), sy(c), 7, 0, 6.284); ctx.stroke(); ctx.setLineDash([]);
+  }
   function riskRing(s, h) {                     // ámbar: puede vaciarse en ~30 min
     const c = iso(s.x, s.y, s.z + h + 14);
     ctx.strokeStyle = "#e6a23c"; ctx.lineWidth = 1.8; ctx.setLineDash([3, 2.5]);
@@ -1056,13 +1124,30 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   function setPlaying(p) {
     playing = p;
     el.play.textContent = p ? "Pausa" : "Reproducir";
-    if (p) { last = performance.now(); requestAnimationFrame(tick); }
+    if (p) {
+      if (pos >= NF - 1.01) pos = 0;             // al final del día, reproducir = volver a empezar
+      if (!storyQ) syncStory();                  // reproducir ES el día narrado: no hay modo sin guion
+      last = performance.now(); requestAnimationFrame(tick);
+    }
   }
   function tick(now) {
     if (!playing) return;
     const dt = now - last; last = now;
+    if (storyQ && now < holdUntil) {             // parada narrada: el tiempo espera al rótulo
+      draw(); requestAnimationFrame(tick); return;
+    }
+    if (storyQ && now >= holdUntil) card.hidden = true;
     pos += dt / (SPF * STEPS[step]);
-    if (!(pos >= 0) || pos >= NF - 1) { pos = 0; }   // también si el reloj dio NaN
+    if (storyQ && storyIdx < storyQ.length && pos >= storyQ[storyIdx].frame) {
+      const { frame, b } = storyQ[storyIdx++];
+      pos = frame;
+      card.querySelector(".sc-t").textContent = fDay.format(new Date(F[frame].t + "Z")) + " · " + fTime.format(new Date(F[frame].t + "Z"));
+      card.querySelector(".sc-x").textContent = b.t;
+      card.hidden = false;
+      storyRings = new Set(b.s);
+      holdUntil = now + 5200;
+    }
+    if (pos >= NF - 1 || !(pos >= 0)) { endStory(); pos = NF - 1; setPlaying(false); draw(); return; }
     draw();
     requestAnimationFrame(tick);
   }
@@ -1076,6 +1161,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     setHours();
     if (atEdge) pos = NF - 1;
     else { const i = F.findIndex(f => f.t >= seen); pos = i < 0 ? NF - 1 : i; }
+    if (storyQ) syncStory();                     // los índices del guion dejan de valer: se recalculan
     draw();
   }
   el.rate.addEventListener("click", () => {
@@ -1086,6 +1172,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   el.scrub.addEventListener("input", () => {
     setPlaying(false);
     pos = (+el.scrub.value / 100) * (NF - 1);
+    if (storyQ) syncStory();                     // mover la barra no rompe el guion: lo reubica
     draw();
   });
   const HOUR = () => Math.max(1, 12 / STEPS[step]);   // frames que caben en una hora
