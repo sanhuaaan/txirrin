@@ -34,3 +34,23 @@ Red entera (media de llegadas por estación y tarde): lunes 13.7, martes 13.1, m
 - Método: llegadas 19-23 h de lunes a viernes, 30 tardes, exceso local >=1.3x
   repetido en >=70 % de las semanas. Con 6 ocurrencias por día de la semana, la
   consistencia pesa más que la magnitud.
+
+## Indagación del entorno (2026-10-02): qué hay a 250 m de cada señal
+
+Cruce de tres fuentes: OpenStreetMap (locales alrededor), guías web del
+pintxo-pote, y la forma horaria del exceso en nuestros propios datos
+(un bar llena a las 20 h y vacía a las 23; una clase llena y vacía con una
+hora de diferencia).
+
+| señal | entorno (OSM) | forma horaria | veredicto probable |
+|---|---|---|---|
+| **Gros, jueves** (Gran Vía + Bermingham) | 69 bares/cafés en 250 m | llega 20 h, se va 23 h | **pintxo-pote (juevintxo)** — día, zona, densidad y forma coinciden |
+| **Pio Baroja, miércoles** | Pio Baroja Kiroldegia, gimnasio Metropolitan, 6 piscinas, cero bares | llega 20 h, se va 21 h | **deporte/clases del polideportivo**, no potes |
+| **Sagastieder (Intxaurrondo), lunes** | Kultur Etxea, canchas (calistenia), colegio, 2 bares | llega 21 h, se va 22 h | **actividad con horario** (kultur etxea o deporte), no potes |
+| **Txapillo (Aiete), miércoles** | colegios (Aiete, St. Patrick's) y campos | difusa | débil; probablemente actividad escolar/deportiva |
+| **Benta Berri, viernes** (Magisterio, K. Santamaria, Berio) | 13 restaurantes + 7 bares/pubs (Campus, El Tercer Tiempo…), Escuela de Ingeniería, gimnasio | llega 18-21 h, se va 20-23 h | **tarde social fuerte propia** de la zona universitaria-hostelera; una guía de 2017 sitúa el pintxo-pote del Antiguo en *miércoles* — validar si cambió o si esto es otra cosa |
+
+Lección de método: el detector encuentra **recurrencia**, no motivo. El mismo
+patrón estadístico lo producen un pintxo-pote y una clase de spinning; los
+separa el entorno (bares vs. polideportivo) y la duración de la estancia
+(3 h vs. 1 h). Las dos cosas salen gratis: OSM y nuestros propios eventos.
