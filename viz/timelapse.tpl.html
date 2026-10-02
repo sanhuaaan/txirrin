@@ -441,8 +441,59 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     const [hh, mm] = fTime.format(d).split(":");
     return { min: (+hh) * 60 + (+mm), dow: DOWN[fDowF.format(d)] };
   }
+  // Lo que el mapa marca con el anillo ámbar —partidos, regatas, carreras:
+  // todo lo que tiene sitio y hora— entra también en el guion. El día narrado
+  // no puede contar la tarde de un viernes y callarse que había derbi en
+  // Anoeta. Un rótulo 45 min antes, cuando llega la gente, y otro al acabar,
+  // señalando las estaciones del entorno del recinto y con el saldo de bicis
+  // que esas estaciones tuvieron de verdad en ese rato.
+  const RADIO_RECINTO = 700;                    // m: lo que se anda desde la bici
+  function cercaDe(x, y, n) {
+    return S.map((s, i) => [i, Math.hypot(s.x - x, s.y - y)])
+            .filter(([, d]) => d < RADIO_RECINTO)
+            .sort((a, b) => a[1] - b[1]).slice(0, n).map(([i]) => S[i].id);
+  }
+  function frameDe(t) {                         // frame más cercano; -1 si cae fuera de la ventana
+    let best = -1, bd = Infinity;
+    for (let i = 0; i < NF; i++) {
+      const d = Math.abs(new Date(F[i].t + "Z") - t);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return bd <= 20 * 6e4 ? best : -1;
+  }
+  function saldo(ids, f0, f1) {                 // bicis ganadas (+) o perdidas (-) en esas estaciones
+    if (f0 < 0 || f1 < 0) return 0;
+    const idx = ids.map(id => S.findIndex(s => s.id === id)).filter(i => i >= 0);
+    const at = (f) => idx.reduce((a, i) => a + F[f].b[i], 0);
+    return at(f1) - at(f0);
+  }
+  function eventBeats() {
+    const out = [];
+    for (const dia of Object.values(CTX.events || {})) {
+      for (const e of dia.items || []) {
+        if (e.x == null || !e.s || !e.e) continue;      // sin sitio y hora no se marca ni se narra
+        const s0 = new Date(e.s + "Z"), e0 = new Date(e.e + "Z");
+        const cerca = cercaDe(e.x, e.y, 3);
+        if (!cerca.length) continue;
+        const sitio = e.place || "";
+        const antes = frameDe(new Date(s0.getTime() - 45 * 6e4));
+        if (antes >= 0) {
+          const d = saldo(cerca, frameDe(new Date(s0.getTime() - 135 * 6e4)), antes);
+          out.push({ frame: antes, b: { s: cerca, t: `${e.name}, a las ${e.h}` + (sitio ? ` en ${sitio}` : "") + "." +
+            (Math.abs(d) >= 3 ? ` Las estaciones de alrededor ${d > 0 ? "llevan +" + d : "llevan " + d} bicis en la última hora y media.` : "") } });
+        }
+        const luego = frameDe(new Date(e0.getTime() + 15 * 6e4));
+        if (luego >= 0) {
+          const d = saldo(cerca, frameDe(e0), luego);
+          out.push({ frame: luego, b: { s: cerca, t: `Acaba: ${e.name}.` +
+            (Math.abs(d) >= 3 ? ` Las estaciones del entorno ${d > 0 ? "ganan " + d : "pierden " + (-d)} bicis en el cuarto de hora siguiente.` : "") } });
+        }
+      }
+    }
+    return out.slice(0, 6);
+  }
   function buildStory() {
-    const q = [];
+    const q = eventBeats();
     for (const b of STORY) {
       for (let i = 0; i < NF; i++) {
         const fl = frameLocal(i);
