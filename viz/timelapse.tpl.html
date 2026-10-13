@@ -246,7 +246,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 <dialog id="rep-dlg" aria-labelledby="rep-title">
   <div class="dlg-head"><h2 id="rep-title">Reparto óptimo</h2><button id="rep-close" aria-label="Cerrar">✕</button></div>
   <form id="rep-form">
-    <label>Tipo de día<select id="rep-dt"><option value="lab">laborable</option><option value="sab">sábado</option><option value="dom">domingo o festivo</option></select></label>
+    <label>Día<select id="rep-dt"><option value="lun">lunes</option><option value="mar">martes</option><option value="mie">miércoles</option><option value="jue">jueves</option><option value="vie">viernes</option><option value="sab">sábado</option><option value="dom">domingo</option><option value="fes">festivo</option></select></label>
     <label>Hora del reparto <span class="hv" id="rep-hv">06:00</span><input type="range" id="rep-h" min="6" max="23" step="1" value="6"></label>
     <label>Mover como máximo <span class="hv" id="rep-mv">40 bicis</span><input type="range" id="rep-max" min="0" max="200" step="5" value="40"></label>
     <label>Estaciones a visitar como máximo <span class="hv" id="rep-sv">12</span><input type="range" id="rep-stops" min="1" max="70" step="1" value="12"></label>
@@ -255,7 +255,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div id="rep-out" aria-live="polite"></div>
   <button id="rep-apply" type="button">Ver en el mapa</button>
   <button id="rep-clear" type="button" hidden>Quitar del mapa</button>
-  <p class="dlg-note">Con la flota que hay, cuántas bicis debería tener cada estación a esa hora para pasar el menor tiempo posible sin bicis o sin anclajes en las 24 h siguientes. Modelo de marea media por hora, corregido de lo que las estaciones vacías dejan de prestar (<code>analysis/reparto.md</code>). Exagera la deriva: la mejora es relativa, no una promesa.</p>
+  <p class="dlg-note">Con la flota que hay, cuántas bicis debería tener cada estación a esa hora para pasar el menor tiempo posible sin bicis o sin anclajes en las 24 h siguientes. Modelo de marea media por hora y día de la semana (los festivos aparte; cada día encogido hacia la media de su tipo), corregido de lo que las estaciones vacías dejan de prestar y con las horas de partido fuera de la media (<code>analysis/reparto.md</code>). Partiendo de ahora, si hoy hay partido, regata o carrera, suma a las estaciones de alrededor lo que esos eventos mueven de verdad (<code>analysis/partidos.md</code>). Exagera la deriva: la mejora es relativa, no una promesa.</p>
 </dialog>
 
 <dialog id="plan-dlg" aria-labelledby="plan-title">
@@ -1350,17 +1350,45 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     }
     return oob / (order.length * STEPS_H);
   }
+  // Los eventos de hoy con sitio (partido, regata, carrera) suman a la marea
+  // de las estaciones de alrededor el exceso medido en los anteriores
+  // (rates.json `events`: por anillo de distancia y hora relativa al inicio).
+  // Solo partiendo de ahora: un "martes" abstracto no tiene partido.
+  const KIND_EV = { "Fútbol": "futbol", "Baloncesto": "baloncesto", "Regata": "regata", "Carrera popular": "carrera", "Ciclismo": "ciclismo" };
+  function repEvents(live) {
+    if (!live || !RATES.events) return [];
+    const ev = (CTX.events || {})[fISO.format(new Date())], out = [];
+    for (const e of (ev && ev.items) || []) {
+      const p = RATES.events[KIND_EV[e.type]];
+      if (!p || e.x == null || !e.s) continue;
+      out.push({ e, p, h0: +fTime.format(new Date(e.s + "Z")).split(":")[0], arr: 0, dep: 0 });
+    }
+    return out;
+  }
   function repPlan(dt, H, live, lam = 0) {       // lam: coste por bici movida (en puntos de banda)
     const h0 = RATES.h0, nh = 24 - h0, order = [];
     for (let i = H - h0; i < nh; i++) order.push(i);
     for (let i = 0; i < H - h0; i++) order.push(i);     // la noche no mueve nada: ventana de 24 h
-    const rows = [];
+    const rows = [], evs = repEvents(live);
     for (let i = 0; i < N; i++) {
       const r = RATES.rates[dt] && RATES.rates[dt][S[i].id], cap = RATES.cap[S[i].id];
       if (!r || r.days < 5 || !cap) continue;
       const now = Math.round(live ? F[NF - 1].b[i] : r.stock[H - h0]);
+      let dep = r.dep, arr = r.arr;
+      for (const x of evs) {
+        const d = Math.hypot(S[i].x - x.e.x, S[i].y - x.e.y);
+        const rg = d <= x.p.rings[0] ? 0 : d <= x.p.rings[1] ? 1 : -1;
+        if (rg < 0) continue;
+        if (dep === r.dep) { dep = r.dep.slice(); arr = r.arr.slice(); }
+        x.p.offs.forEach((o, j) => {
+          const h = x.h0 + o;                      // hora del reloj; lo ya pasado no cuenta
+          if (h < H || h - h0 < 0 || h - h0 >= dep.length) return;
+          const da = Math.max(-arr[h - h0], x.p.arr[rg][j]), dd = Math.max(-dep[h - h0], x.p.dep[rg][j]);
+          arr[h - h0] += da; dep[h - h0] += dd; x.arr += da; x.dep += dd;
+        });
+      }
       const cost = new Float64Array(cap + 1);
-      for (let s0 = 0; s0 <= cap; s0++) cost[s0] = repCost(r.dep, r.arr, order, s0, cap);
+      for (let s0 = 0; s0 <= cap; s0++) cost[s0] = repCost(dep, arr, order, s0, cap);
       const nw = Math.min(cap, now);
       // guardia: nunca dejar una estación a 0 (la marea media no ve los días malos);
       // y cada bici movida cuesta lam, para que solo viajen las que compran mejora
@@ -1390,7 +1418,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     const costOpt = rows.reduce((a, r) => a + real(r, r.opt), 0) / rows.length;
     const moved = rows.reduce((a, r) => a + Math.max(0, r.opt - r.now), 0);
     const stops = rows.reduce((a, r) => a + (r.opt !== r.now ? 1 : 0), 0);
-    return { rows, B, costNow, costOpt, moved, stops };
+    return { rows, B, costNow, costOpt, moved, stops, evs };
   }
   function repPlanMax(dt, H, live, maxMoved, maxStops) {   // el precio que respeta ambos topes, por bisección
     const ok = (q) => q.moved <= maxMoved && q.stops <= maxStops;
@@ -1419,6 +1447,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       `<div><b>${plan.stops}</b><span>estaciones a visitar</span></div>` +
       `<div><b>${(plan.costNow * 100).toFixed(0)} % → ${(plan.costOpt * 100).toFixed(0)} %</b><span>tiempo fuera de banda (simulado)</span></div></div>` +
       `<div class="alt" style="padding:0 0 .4rem">Hoy ${(plan.costNow * 100).toFixed(0)} % · moviendo ${curva.join(" · ")}</div>` +
+      plan.evs.filter(x => x.arr || x.dep).map(x => `<div class="alt" style="padding:0 0 .4rem">Hoy, ${x.e.name} a las ${x.e.h}: la marea de las estaciones a menos de ${x.p.rings[1] / 1000} km lleva ${(x.arr >= 0 ? "+" : "") + Math.round(x.arr)} llegadas y ${(x.dep >= 0 ? "+" : "") + Math.round(x.dep)} salidas de aquí al final de la ventana (medido en ${x.p.n} ${x.p.n === 1 ? "evento anterior" : "eventos anteriores"}).</div>`).join("") +
       "<ul>" + mv.map(r =>
         `<li class="${r.m > 0 ? "add" : "rm"}">${r.m > 0 ? "+" : ""}${r.m} ${nombre(S[r.i])} <small>(${r.now}→${r.opt})</small></li>`).join("") + "</ul>";
   }
@@ -1442,7 +1471,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     if (live) {
       const d = new Date(), iso = fISO.format(d);
       $p("rep-h").value = Math.max(6, +fTime.format(d).split(":")[0]);
-      $p("rep-dt").value = (PLAN && PLAN.holidays.includes(iso)) || d.getDay() === 0 ? "dom" : d.getDay() === 6 ? "sab" : "lab";
+      $p("rep-dt").value = PLAN && PLAN.holidays.includes(iso) ? "fes" : ["lun", "mar", "mie", "jue", "vie", "sab", "dom"][DOWN[fDowF.format(d)]];
     }
     $p("rep-hv").textContent = pad(+$p("rep-h").value) + ":00";
     $p("rep-mv").textContent = $p("rep-max").value + " bicis"; $p("rep-sv").textContent = $p("rep-stops").value;

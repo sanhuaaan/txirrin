@@ -140,3 +140,37 @@ palancas que la web no tiene. Lo que enseñó, laborable desde las 06:00,
 - Heurística del horario auto: sencilla y a veces falla (sábado, 3 rondas:
   junta dos rondas y deja la noche); una búsqueda exhaustiva de horas la
   corregiría a cambio de segundos de cálculo por cambio de mando.
+
+## Segunda vuelta parcial: semana, festivos y eventos (2026-10-13)
+
+La primera vuelta promediaba por tres tipos de día. Eso diluía lo que seis
+semanas de datos habían enseñado (el martes de Andoain kalea, el juevintxo de
+Gros, el +20 % del viernes) y mezclaba los partidos en la media de todas las
+semanas. Tres cambios en `build_rates.py`, sin tocar la DP:
+
+- **Día de la semana, festivos aparte.** Con ~8 semanas hay ~8 días por
+  casilla: cada día de la semana se encoge hacia la media de su tipo como si
+  tuviera K=3 días más de ella (`rate = (n·día + 3·tipo) / (n + 3)`). Donde el
+  día es consistente, se nota; donde es ruido, pesa la base. Los festivos
+  (`fes`) encogen hacia el domingo. Las claves `lab/sab/dom` se siguen dando y
+  el simulador las usa tal cual.
+- **Las horas de evento fuera de la media.** Para fútbol y baloncesto, las
+  horas de [inicio−2 h, fin+1,5 h] en las estaciones a menos de 1.600 m del
+  recinto; para regata, carrera y ciclismo, en toda la red.
+- **Perfil de evento** (`events` en `rates.json`): con esas mismas horas, el
+  exceso medio de llegadas y salidas por estación y hora sobre la base, por
+  anillo (<800 m, 800–1.600 m) y hora relativa al inicio (−2…+3). El botón
+  *Reparto*, partiendo de ahora, lo suma a la marea de las estaciones de
+  alrededor cuando hoy hay evento, y lo dice. Un «martes» abstracto no tiene
+  partido: la capa solo actúa en el directo.
+
+Lo que mueve un partido, medido en `partidos.md` (6 partidos en Anoeta, 29 ago
+→ 11 oct; estaciones a <800 m, frente al mismo día de la semana sin partido):
+**+44 llegadas** en las 2 h previas (base 51: casi el doble) y **+54 salidas** en
+la hora y media tras el final (base 20: casi ×4), concentradas en los 30 min
+siguientes al pitido. El efecto llega a 1,6 km: el anillo de 800–1.200 m (8
+estaciones) suma otras +31/+31. Baloncesto en Illumbe (1 partido): +13/+6, con
+una sola estación cerca. Regatas de la Concha (2): +17/+11 en la bahía, un 30 %
+sobre una base ya alta de domingo. Lo que no sabe el modelo: nada de lo que pasa
+en Zubieta ni en los conciertos del estadio; el 31 de agosto (festivo local) no
+está en la tabla de festivos y cuenta como laborable.

@@ -439,6 +439,7 @@ tiene su informe completo en `analysis/`.
 | 2026-10-02 | ¿Qué otras rutinas semanales hay? | El domingo (Ondarreta, vermú, paseo del Ayuntamiento) es la más fuerte; el martes de Andoain kalea sigue sin explicar | `weekly_flows.md` |
 | 2026-10-13 | ¿Son fiables las probabilidades del planificador? | Vacía y sin eléctricas calibradas (+17-20 % sobre la media de red); «llena» no | `plan_calibration.md` |
 | 2026-10-13 | **Reparto óptimo, primera vuelta** (etapas 1, 3 sin meteo, 4) | La red está el 15 % del tiempo fuera de banda, casi todo vacío y cuesta arriba; mover ~160 bicis del llano a la periferia a las 06:00 lo bajaría a ~6 % (simulado, optimista) | `reparto.md` |
+| 2026-10-13 | ¿Cuánto mueve un partido en Anoeta? | +44 llegadas en las 2 h previas y +54 salidas tras el final en las 5 estaciones a <800 m (×2 y ×4 sobre la base); el efecto llega a 1,6 km. Regatas y baloncesto, mucho menos | `partidos.md` |
 | 2026-10-13 | ¿Qué palanca rinde más contra las estaciones vacías? (simulador "Un día con reparto", `viz/reparto_dia.tpl.html`) | Una ronda matutina no arregla el día; rondas programadas antes de las subidas de vacías ganan a las fijas; cerrar a cero cuesta ~160 bicis/día en 4 rondas; +100 bicis de flota ≈ 3 rondas diarias; los anclajes solos no sirven | `reparto.md` |
 
 ### Corriendo solo (todo dentro de la VM gratuita)
@@ -456,6 +457,10 @@ tiene su informe completo en `analysis/`.
   tipo de día × hora, corregida de censura y con conservación, más el stock típico); el botón
   *Reparto* simula y optimiza en el navegador (DP exacta, <100 ms) para la hora y tipo de día
   elegidos —o partiendo del estado real de ahora— y pinta en el mapa dónde añadir y retirar bicis.
+  La marea es **por día de la semana** (festivos aparte, cada día encogido hacia la media de su tipo),
+  **sin las horas de partido** en la media, y partiendo de ahora suma a las estaciones de alrededor
+  lo que un partido mueve de verdad (+44 llegadas antes y +54 salidas después a <800 m de Anoeta,
+  medido en `analysis/partidos.md`).
   Mandos: tope de bicis a mover y de estaciones a visitar (un precio por bici y por parada,
   buscado por bisección), suelo de 1 bici por estación, ninguna parada por una sola bici, y la
   curva de rendimientos decrecientes (en laborable a las 06:00, 22 bicis en 11 estaciones compran
