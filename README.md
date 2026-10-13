@@ -440,7 +440,13 @@ tiene su informe completo en `analysis/`.
 
 - **Collector**: snapshot GBFS cada 2 min a Postgres, sin un día perdido desde el 2026-08-20.
 - **Contexto**: meteo horaria (Open-Meteo), festivos y cosecha de eventos.
-- **Timelapse**: `data.json` cada 5 min al bucket; la web con paso 5 min/30 min/1 h.
+- **Timelapse**: `data.json` cada 5 min al bucket (con eléctricas por estación para el tooltip);
+  la web narra el día (modo historia) y tiene paso 5 min/30 min/1 h.
+- **Planificador de viajes**: `publish_plan.sh` cada noche (04:40) calcula, por estación × tipo de
+  día × hora y con las últimas 8 semanas, la probabilidad de estar vacía, llena o sin eléctricas, y
+  sube `plan.json`; el botón *Planifica* de la web da el semáforo de salida y llegada con
+  alternativas cercanas. Calibración en `analysis/plan_calibration.md`: vacía y sin eléctricas
+  fiables; «llena» solo orientativa.
 
 **Principio vigente**: en producción solo lo que quepa en la e2-micro gratuita.
 El portátil vale para análisis puntuales, no para servicios.

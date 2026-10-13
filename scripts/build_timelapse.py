@@ -64,7 +64,7 @@ def build_frames(path, st, minutes):
     directo), y una animación necesita paso constante para no dar tirones.
     """
     idx = {s["id"]: i for i, s in enumerate(st)}
-    snaps, opens, dis = {}, {}, {}
+    snaps, opens, dis, elec = {}, {}, {}, {}
     for r in csv.reader(open(path, encoding="utf-8")):
         if len(r) < 3 or r[0] not in idx or not r[2].strip():
             continue
@@ -75,6 +75,9 @@ def build_frames(path, st, minutes):
         # 5a opcional: bicis averiadas ancladas
         if len(r) > 4 and r[4].strip():
             dis.setdefault(r[1], {})[idx[r[0]]] = int(r[4])
+        # 6a opcional: de las disponibles, cuántas son eléctricas (el resto, mecánicas)
+        if len(r) > 5 and r[5].strip():
+            elec.setdefault(r[1], {})[idx[r[0]]] = int(r[5])
     if not snaps:
         sys.exit(f"{path}: sin mediciones")
     keys = sorted(snaps)
@@ -113,6 +116,8 @@ def build_frames(path, st, minutes):
                 o = opens[last]; fr["o"] = "".join("1" if o.get(i, True) else "0" for i in range(len(st)))
             if last in dis:
                 dd = dis[last]; fr["d"] = [dd.get(i, 0) for i in range(len(st))]
+            if last in elec:
+                ee = elec[last]; fr["e"] = [ee.get(i, 0) for i in range(len(st))]
             frames.append(fr)
         t += timedelta(minutes=minutes)
     return frames

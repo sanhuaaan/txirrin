@@ -72,10 +72,29 @@ button#ev:hover svg{color:var(--ink)}
 button#ev .n{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:14px; color:var(--ink)}
 #ev-dlg{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:4px;
   padding:18px 22px; width:min(520px, calc(100vw - 32px)); max-height:80vh; font-size:13px}
-#ev-dlg::backdrop{background:rgba(6,9,12,.6); backdrop-filter:blur(3px)}
+#ev-dlg::backdrop, #plan-dlg::backdrop{background:rgba(6,9,12,.6); backdrop-filter:blur(3px)}
+#plan-dlg{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:0.25rem;
+  padding:1.1rem 1.4rem; width:min(34rem, calc(100vw - 2rem)); max-height:85vh; font-size:0.8125rem}
+#plan-form{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0.6rem 0.9rem; margin-top:0.8rem}
+#plan-form label{display:flex; flex-direction:column; gap:0.25rem; font-size:0.6875rem; color:var(--ink-3);
+  text-transform:uppercase; letter-spacing:.05em}
+#plan-form select, #plan-form input[type=date], #plan-form input[type=time]{font:inherit; font-size:0.8125rem;
+  text-transform:none; letter-spacing:0; color:var(--ink); background:var(--bg, #0c1116);
+  border:1px solid var(--line); border-radius:0.2rem; padding:0.4rem 0.5rem; min-width:0}
+#plan-form .chk{flex-direction:row; align-items:center; gap:0.5rem; grid-column:1 / -1;
+  text-transform:none; letter-spacing:0; font-size:0.8125rem; color:var(--ink-2)}
+#plan-out{margin-top:1rem; line-height:1.5}
+#plan-out h3{margin:0.9rem 0 0.3rem; font-size:0.6875rem; font-weight:500; color:var(--ink-3);
+  text-transform:uppercase; letter-spacing:.06em}
+#plan-out .row{display:flex; gap:0.6rem; align-items:baseline; padding:0.2rem 0}
+#plan-out .sem{flex:none; width:0.6rem; height:0.6rem; border-radius:50%; transform:translateY(0.05rem)}
+#plan-out .ok{background:#5fb87a} #plan-out .warn{background:#e6a23c} #plan-out .bad{background:#e66767}
+#plan-out .alt{color:var(--ink-2); font-size:0.75rem; padding-left:1.2rem}
+#plan-out .now{color:#7fd4ff; font-size:0.75rem; padding-left:1.2rem}
 .dlg-head{display:flex; justify-content:space-between; align-items:baseline; gap:16px}
 .dlg-head h2{margin:0; font-family:"Bodoni Moda",serif; font-weight:500; font-size:22px}
 #ev-close{min-width:0; padding:4px 9px; font-size:13px}
+#plan-close{min-width:0; padding:0.25rem 0.55rem; font-size:0.8125rem}
 #ev-counts{font-size:12px; color:var(--ink-3); margin-top:6px}
 #ev-list{list-style:none; margin:12px 0 0; padding:0; line-height:1.45}
 #ev-list li{padding:7px 0; border-top:1px solid var(--line); display:flex; gap:14px; align-items:baseline}
@@ -205,12 +224,26 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 <div class="overlay" id="ctl">
   <button id="play" aria-label="Reproducir o pausar el día narrado" title="El día narrado: lo que seis semanas de datos han enseñado">Reproducir</button>
   <button id="rate" aria-label="Paso entre frames" title="Paso: con menos frames las barras deslizan en vez de temblar">5 min</button>
+  <button id="plan-btn" aria-haspopup="dialog" aria-controls="plan-dlg" title="¿Tendré bici al salir y sitio al llegar?">Planifica</button>
   <div id="track">
     <canvas id="strip" height="28" aria-hidden="true"></canvas>
     <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
   </div>
   <span id="speed"></span>
 </div>
+
+<dialog id="plan-dlg" aria-labelledby="plan-title">
+  <div class="dlg-head"><h2 id="plan-title">Planifica tu viaje</h2><button id="plan-close" aria-label="Cerrar">✕</button></div>
+  <form id="plan-form">
+    <label>Origen<select id="plan-o"></select></label>
+    <label>Destino<select id="plan-d"></select></label>
+    <label>Día<input type="date" id="plan-day"></label>
+    <label>Hora de salida<input type="time" id="plan-time" step="900"></label>
+    <label class="chk"><input type="checkbox" id="plan-e"> Necesito una eléctrica</label>
+  </form>
+  <div id="plan-out" aria-live="polite"></div>
+  <p class="dlg-note" id="plan-note"></p>
+</dialog>
 
 <div id="story-card" role="status" aria-live="polite" hidden>
   <div class="sc-t"></div><div class="sc-x"></div>
@@ -1084,8 +1117,12 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
                  : v <= 0 ? "sin bicis" : v >= cap ? "sin anclajes libres"
                  : r < .25 ? "casi vacía" : r > .75 ? "casi llena" : "equilibrada";
     const fd = F[Math.min(NF - 1, Math.floor(pos))].d, nd = fd ? fd[hover] : 0;
+    const fe = F[Math.min(NF - 1, Math.floor(pos))].e;
+    const ne = fe ? Math.min(v, fe[hover]) : null;   // eléctricas del frame; mecánicas = el resto
     el.tip.innerHTML = '<div class="n">' + s.n + '</div><div class="d">' +
       v + " / " + cap + " bicis" + (nd ? " (+ " + nd + (nd > 1 ? " averiadas)" : " averiada)") : "") + " · " + estado +
+      (ne !== null && v > 0 ? "<br>" + ne + (ne === 1 ? " eléctrica" : " eléctricas") + " · " +
+        (v - ne) + (v - ne === 1 ? " mecánica" : " mecánicas") : "") +
       (enRiesgo ? '<br>ahora: riesgo de quedarse sin bicis en ~30 min' : "") + "</div>";
     el.tip.style.left = mx + "px";
     el.tip.style.top = (my - 14) + "px";
@@ -1165,6 +1202,107 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
 
   cvs.addEventListener("dblclick", resetView);
 
+  // --- planificador: riesgo histórico por estación × tipo de día × hora (plan.json) ---
+  // Calibrado en analysis/plan_calibration.md: vacía y sin eléctricas fiables;
+  // "llena" no gana a la media de red, así que solo se dice en cualitativo.
+  const planDlg = document.getElementById("plan-dlg"), $p = (id) => document.getElementById(id);
+  let PLAN = null;
+  const nombre = (s) => s.n.replace(/^\s*\d+\s*[-–]*\s*/, "");
+  const ord = S.map((s, i) => i).sort((a, b) => nombre(S[a]).localeCompare(nombre(S[b]), "es"));
+  for (const sel of [$p("plan-o"), $p("plan-d")])
+    sel.innerHTML = ord.map(i => `<option value="${i}">${nombre(S[i])}</option>`).join("");
+  $p("plan-d").selectedIndex = Math.min(1, ord.length - 1);
+  const pad = (n) => String(n).padStart(2, "0");
+  function planDefaults() {
+    const t = new Date(Date.now() + 30 * 6e4);
+    const m = Math.ceil(t.getMinutes() / 15) * 15;
+    t.setMinutes(m % 60); if (m === 60) t.setHours(t.getHours() + 1);
+    $p("plan-day").value = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+    $p("plan-time").value = `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+  }
+  const nivel = (p) => p < 10 ? "ok" : p < 30 ? "warn" : "bad";
+  const fila = (p, txt) => `<div class="row"><span class="sem ${nivel(p)}"></span><span>${txt}</span></div>`;
+  function tipoDia(iso) {
+    if (PLAN.holidays.includes(iso)) return "dom";
+    const d = new Date(iso + "T12:00:00").getDay();
+    return d === 0 ? "dom" : d === 6 ? "sab" : "lab";
+  }
+  const riesgo = (i, dt, h) => {                // 0-6 h Dbizi no da servicio aunque alguna estación siga reportando
+    if (h < 6 || h > 23) return null;
+    const st = PLAN.stations[S[i].id]; return st && st[dt] ? st[dt][h] : null;
+  };
+  function alternativas(i, dt, h, peor) {         // vecinas a pie con menos riesgo a esa hora
+    return S.map((s, j) => [j, Math.hypot(s.x - S[i].x, s.y - S[i].y)])
+      .filter(([j, d]) => j !== i && d <= 450)
+      .map(([j, d]) => [j, d, riesgo(j, dt, h)]).filter(([, , r]) => r && peor(r) < peor(riesgo(i, dt, h)))
+      .sort((a, b) => peor(a[2]) - peor(b[2])).slice(0, 2)
+      .map(([j, d, r]) => `${nombre(S[j])} (${Math.round(d / 10) * 10} m, ${peor(r)} %)`);
+  }
+  function planRender() {
+    if (!PLAN) return;
+    const o = +$p("plan-o").value, d = +$p("plan-d").value, e = $p("plan-e").checked;
+    const iso = $p("plan-day").value, [hh, mm] = ($p("plan-time").value || "00:00").split(":").map(Number);
+    if (!iso) return;
+    const dt = tipoDia(iso), h0 = hh;
+    const dist = Math.hypot(S[o].x - S[d].x, S[o].y - S[d].y);
+    const viaje = o === d ? 0 : Math.round(dist / 1000 / 12 * 60) + 2;   // ~12 km/h en línea recta + anclar
+    const llegada = hh * 60 + mm + viaje, h1 = Math.floor(llegada / 60);
+    const r0 = riesgo(o, dt, h0), r1 = h1 < 24 ? riesgo(d, dt, h1) : null;
+    const etiqueta = { lab: "laborable", sab: "sábado", dom: "domingo o festivo" }[dt];
+    let html = "";
+    html += `<h3>Salida · ${nombre(S[o])} · ${pad(hh)}:${pad(mm)} (${etiqueta})</h3>`;
+    if (!r0) html += fila(100, "Dbizi no presta bicis a esa hora.");
+    else {
+      html += fila(r0[0], `Sin ninguna bici el <b>${r0[0]} %</b> del tiempo a esa hora.`);
+      if (e) html += fila(r0[2], `Sin eléctricas el <b>${r0[2]} %</b> del tiempo.`);
+      const peor = (r) => e ? Math.max(r[0], r[2]) : r[0];
+      if (peor(r0) >= 10) {
+        const alt = alternativas(o, dt, h0, peor);
+        if (alt.length) html += `<div class="alt">Mejor cerca: ${alt.join(" · ")}</div>`;
+      }
+      const sal = new Date(`${iso}T${pad(hh)}:${pad(mm)}:00`), falta = (sal - Date.now()) / 6e4;
+      if (falta > -15 && falta <= 60 && F[NF - 1].b) {            // tan cerca, el estado real pesa más
+        const b = F[NF - 1].b[o], el = F[NF - 1].e ? F[NF - 1].e[o] : null;
+        html += `<div class="now">Ahora mismo tiene ${b} ${b === 1 ? "bici" : "bicis"}` +
+                (el !== null ? ` (${el} ${el === 1 ? "eléctrica" : "eléctricas"})` : "") +
+                ". A menos de una hora, esto cuenta más que el histórico.</div>";
+      }
+    }
+    if (o !== d) {
+      html += `<h3>Llegada · ${nombre(S[d])} · ~${pad(h1 % 24)}:${pad(llegada % 60)} (${viaje} min)</h3>`;
+      if (!r1) html += fila(100, "Fuera del horario de Dbizi.");
+      else {
+        const f = r1[1], txt = f < 5 ? "Casi nunca está llena a esa hora." : f < 15 ? "A veces se llena a esa hora." : "Se llena con frecuencia a esa hora.";
+        html += fila(f < 5 ? 0 : f < 15 ? 15 : 40, txt);
+        if (f >= 15) {
+          const alt = alternativas(d, dt, h1, (r) => r[1]);
+          if (alt.length) html += `<div class="alt">Para dejarla: ${alt.join(" · ")}</div>`;
+        }
+      }
+    }
+    $p("plan-out").innerHTML = html;
+    const n = PLAN.days;
+    $p("plan-note").textContent = `Según las últimas 8 semanas (${n.lab || 0} laborables, ${n.sab || 0} sábados, ` +
+      `${n.dom || 0} domingos y festivos). Comprobado con datos: cuando dice 20 %, pasa en torno al 20 %. ` +
+      "No sabe de lluvia ni de eventos. Lo de «llena» es orientativo: se predice peor.";
+  }
+  async function planOpen() {
+    setPlaying(false);
+    planDefaults();
+    planDlg.showModal();
+    if (!PLAN) {
+      $p("plan-out").textContent = "Cargando el histórico…";
+      try { const r = await fetch("plan.json?t=" + Date.now(), { cache: "no-store" }); PLAN = await r.json(); }
+      catch (err) { $p("plan-out").textContent = "No se pudo cargar el histórico."; return; }
+    }
+    planRender();
+  }
+  $p("plan-btn").addEventListener("click", planOpen);
+  $p("plan-close").addEventListener("click", () => planDlg.close());
+  planDlg.addEventListener("click", (ev) => { if (ev.target === planDlg) planDlg.close(); });
+  $p("plan-form").addEventListener("input", planRender);
+  $p("plan-form").addEventListener("submit", (ev) => ev.preventDefault());
+
   // agenda en un modal: el panel solo lleva la cuenta
   const dlg = document.getElementById("ev-dlg");
   el.ev.addEventListener("click", () => { setPlaying(false); dlg.showModal(); });
@@ -1228,7 +1366,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   });
   const HOUR = () => Math.max(1, 12 / STEPS[step]);   // frames que caben en una hora
   addEventListener("keydown", (e) => {
-    if (dlg.open) return;                       // con el modal abierto, los atajos no
+    if (dlg.open || planDlg.open) return;       // con un modal abierto, los atajos no
     if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
     else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+(e.shiftKey ? HOUR() : 1)); draw(); }   // shift: una hora
     else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-(e.shiftKey ? HOUR() : 1)); draw(); }

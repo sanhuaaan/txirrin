@@ -28,9 +28,10 @@ Q "SELECT station_id, name, ST_Y(geom), ST_X(geom), capacity
 
 # 4a columna: abierta = instalada y (presta o admite). Cerrada o averiada si no.
 # 5a: bicis averiadas ancladas en la estacion (no cuentan en bikes_available).
+# 6a: de las disponibles, cuantas son electricas (las mecanicas son el resto).
 Q "SELECT station_id, to_char(ts AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS'), bikes_available,
           (coalesce(is_installed,true) AND (coalesce(is_renting,true) OR coalesce(is_returning,true))),
-          coalesce(vehicles_disabled, 0)
+          coalesce(vehicles_disabled, 0), coalesce(electric_available, 0)
    FROM dbizi_measurement
    WHERE ts >= now() - interval '$VENTANA_H hours'
    ORDER BY ts, station_id;" > "$TMP/meas.csv"
