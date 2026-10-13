@@ -439,6 +439,7 @@ tiene su informe completo en `analysis/`.
 | 2026-10-02 | ¿Qué otras rutinas semanales hay? | El domingo (Ondarreta, vermú, paseo del Ayuntamiento) es la más fuerte; el martes de Andoain kalea sigue sin explicar | `weekly_flows.md` |
 | 2026-10-13 | ¿Son fiables las probabilidades del planificador? | Vacía y sin eléctricas calibradas (+17-20 % sobre la media de red); «llena» no | `plan_calibration.md` |
 | 2026-10-13 | **Reparto óptimo, primera vuelta** (etapas 1, 3 sin meteo, 4) | La red está el 15 % del tiempo fuera de banda, casi todo vacío y cuesta arriba; mover ~160 bicis del llano a la periferia a las 06:00 lo bajaría a ~6 % (simulado, optimista) | `reparto.md` |
+| 2026-10-13 | ¿Qué palanca rinde más contra las estaciones vacías? (simulador "Un día con reparto", `viz/reparto_dia.tpl.html`) | Una ronda matutina no arregla el día; rondas programadas antes de las subidas de vacías ganan a las fijas; cerrar a cero cuesta ~160 bicis/día en 4 rondas; +100 bicis de flota ≈ 3 rondas diarias; los anclajes solos no sirven | `reparto.md` |
 
 ### Corriendo solo (todo dentro de la VM gratuita)
 

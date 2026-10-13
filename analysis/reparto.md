@@ -102,3 +102,41 @@ nacidas de la observación de que el óptimo "puro" movía el 40 % de la flota:
 - **Curva de rendimientos decrecientes**, laborable 06:00 con datos reales:
   22 bicis en 11 estaciones 24 → 18 %; 44 en 20, → 14 %; 165 en 64, → 6 %.
   La mitad de la mejora máxima se compra con una ruta de 11 estaciones.
+
+## Simulador "Un día con reparto" (2026-10-13)
+
+Artifact interactivo (`viz/reparto_dia.tpl.html` + `rates.json` embebido;
+publicado en https://claude.ai/artifact/EcQHHkXF41eGXZgqTvKUEE, privado): el mismo
+día corriendo dos veces, sin y con reparto, con el camión recorriendo su ruta,
+la curva de estaciones fuera de banda y contadores de horas sin bici, viajes
+perdidos y estaciones vacías al cerrar. Mismo modelo que la web, más tres
+palancas que la web no tiene. Lo que enseñó, laborable desde las 06:00,
+40 bicis y 12 estaciones por ronda salvo que se diga otra cosa:
+
+| escenario | horas de estación sin bici | vacías al cerrar | viajes perdidos |
+|---|---|---|---|
+| hoy | 249 | 14 | 660 |
+| 1 ronda (06:00) | 179 | — | 577 |
+| 3 rondas fijas (06, 12, 18) | 135 | 9 | 426 |
+| 3 rondas antes de las subidas (06, 09, 13) | 113 | 7 | 383 |
+| 4 rondas fijas, 80/20 (06, 12, 18, 22) | 57 | 0 | 194 |
+| 4 rondas antes de las subidas, 80/20 (06, 09, 13, 16) | 19 | 0 | 65 |
+| +100 bicis de flota, sin reparto | 172 | — | 494 |
+| +100 anclajes, 1 ronda | 177 | — | 572 |
+| +100 bicis y 4 rondas 80/20 | 23 | 0 | 83 |
+
+- **Una ronda matutina no arregla el día**: la periferia drena sin parar y lo
+  repuesto a las 06:00 se ha ido a mediodía. Las curvas con y sin reparto
+  convergen por la tarde.
+- **Rondas programadas antes de las subidas de vacías** (inicio de los tramos
+  en que más crece el número de estaciones vacías sin reparto, mirando 3 h por
+  delante) ganan a los horarios fijos en 5 de 6 casos: el drenaje es de mañana y
+  mediodía; a las 18:00 o 22:00 se llega tarde, aunque sirva para cerrar a cero.
+- **Cerrar el día sin ninguna estación vacía** cuesta 4 rondas de ~40 bicis en
+  ~20 estaciones (~160 bicis/día): un camión a jornada completa.
+- **La flota es la palanca grande** (+100 bicis sin camión ≈ 3 rondas diarias) y
+  se multiplica con el reparto; **los anclajes solos no sirven**: la red tiene
+  417 bicis para 1.325 anclajes (31 % de ocupación), sobran huecos.
+- Heurística del horario auto: sencilla y a veces falla (sábado, 3 rondas:
+  junta dos rondas y deja la noche); una búsqueda exhaustiva de horas la
+  corregiría a cambio de segundos de cálculo por cambio de mando.

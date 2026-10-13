@@ -1,0 +1,372 @@
+<title>Un día con reparto</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,wght@0,500;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Mismo mundo visual que el timelapse Txirrin: noche de ciudad, ámbar para "hoy",
+   cian para "con reparto"; dos mapas corriendo el mismo día en paralelo. */
+:root{
+  --bg:#0c1116; --panel:#121a22; --line:#22303b;
+  --ink:#e8eef4; --ink-2:#a9b6c2; --ink-3:#6b7a88;
+  --hoy:#e6a23c; --rep:#7fd4ff;
+  --empty:#e66767; --full:#5b9bff; --ok:#3a4a58;
+  --display:"Bodoni Moda", Georgia, serif;
+  --sans:"IBM Plex Sans", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+  color-scheme:dark;
+}
+body{background:var(--bg); color:var(--ink); font:14px/1.5 var(--sans); padding:0 1.25rem; padding-block:1.5rem 3rem}
+.wrap{max-width:68rem; margin:0 auto; display:grid; gap:1.4rem}
+h1{font:italic 400 2.4rem/1.05 var(--display); margin:0; text-wrap:balance}
+h1 b{font-style:normal; font-weight:500}
+.sub{color:var(--ink-2); max-width:42rem; margin:.5rem 0 0}
+.controls{display:flex; flex-wrap:wrap; gap:.8rem 1.4rem; align-items:end; padding:1rem 1.1rem; background:var(--panel); border:1px solid var(--line); border-radius:.3rem}
+.controls label{display:flex; flex-direction:column; gap:.3rem; font-size:.6875rem; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); min-width:9rem; flex:1}
+.controls label .v{font:500 .95rem var(--mono); color:var(--ink); text-transform:none; letter-spacing:0}
+.controls select{font:inherit; font-size:.85rem; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:.2rem; padding:.4rem .5rem; text-transform:none; letter-spacing:0}
+.controls input[type=range]{width:100%; accent-color:var(--rep)}
+button{font:500 .85rem var(--sans); color:var(--bg); background:var(--rep); border:0; border-radius:.2rem; padding:.6rem 1.1rem; cursor:pointer; flex:none}
+button:hover{filter:brightness(1.08)} button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
+.kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(10.5rem, 1fr)); gap:.8rem}
+.kpi{padding:.9rem 1rem; border-top:2px solid var(--line)}
+.kpi .k{font-size:.6875rem; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3)}
+.kpi .n{font:500 1.9rem/1.1 var(--mono); font-variant-numeric:tabular-nums; margin-top:.25rem}
+.kpi .n small{font-size:1rem; color:var(--ink-3)}
+.kpi .d{font-size:.8rem; color:var(--ink-2); margin-top:.2rem}
+.kpi.hoy{border-top-color:var(--hoy)} .kpi.rep{border-top-color:var(--rep)}
+.race{display:grid; grid-template-columns:1fr 1fr; gap:1rem; position:relative}
+.map{position:relative; background:var(--panel); border:1px solid var(--line); border-radius:.3rem; aspect-ratio:4/3; max-width:100%; overflow:hidden}
+.map canvas{width:100%; height:100%; display:block}
+.map .cap{position:absolute; left:.8rem; top:.6rem; font:500 .75rem var(--sans); letter-spacing:.06em; text-transform:uppercase}
+.map .cap i{display:inline-block; width:.6rem; height:.6rem; border-radius:50%; margin-right:.4rem; vertical-align:-1px}
+.map .st{position:absolute; right:.8rem; top:.6rem; font:.75rem var(--mono); color:var(--ink-2); font-variant-numeric:tabular-nums; text-align:right}
+.clock{position:absolute; left:50%; top:-.4rem; transform:translate(-50%,-100%); font:500 1.6rem var(--mono); font-variant-numeric:tabular-nums; color:var(--ink)}
+.clock small{display:block; font:.7rem var(--sans); color:var(--ink-3); text-align:center; letter-spacing:.06em; text-transform:uppercase}
+.chart{background:var(--panel); border:1px solid var(--line); border-radius:.3rem; padding:.9rem 1rem .6rem}
+.chart h2, .stops h2{margin:0 0 .4rem; font:500 .8rem var(--sans); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2)}
+.chart canvas{width:100%; height:15rem; display:block}
+.legend{display:flex; gap:1.2rem; font-size:.75rem; color:var(--ink-2); margin-top:.4rem}
+.legend i{display:inline-block; width:1.1rem; height:2px; vertical-align:middle; margin-right:.4rem}
+.stops ul{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(14rem, 1fr)); gap:.6rem .9rem}
+.stops li.rh{grid-column:1 / -1; border-top:1px solid var(--rep); padding-top:.6rem}
+.stops li{display:grid; grid-template-columns:3rem 1fr; gap:.6rem; align-items:center; padding:.45rem 0; border-top:1px solid var(--line); min-width:0}
+.stops .m{font:500 1.1rem var(--mono); font-variant-numeric:tabular-nums}
+.stops .m.add{color:#5fb87a} .stops .m.rm{color:var(--empty)}
+.stops .nm{font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.stops canvas{width:100%; height:2.2rem; display:block; margin-top:.2rem}
+.note{color:var(--ink-3); font-size:.78rem; max-width:48rem; line-height:1.55}
+.note code{font-family:var(--mono); font-size:.72rem}
+@media (max-width:640px){ .race{grid-template-columns:1fr} h1{font-size:1.9rem} .clock{position:static; transform:none; text-align:center} }
+@media (prefers-reduced-motion:reduce){ .kpi .n{transition:none} }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Un día con <b>reparto</b></h1>
+    <p class="sub">El mismo día de Dbizi dos veces: a la izquierda la red tal como amanece, a la derecha después de que un camión mueva unas pocas bicis, en una o varias rondas. Las tasas de salida y llegada de cada estación salen de las últimas 8 semanas, cada 2 minutos.</p>
+  </header>
+
+  <form class="controls" id="ctl">
+    <label>Tipo de día<select id="dt"><option value="lab">laborable</option><option value="sab">sábado</option><option value="dom">domingo o festivo</option></select></label>
+    <label>Hora del reparto <span class="v" id="hv">06:00</span><input type="range" id="h" min="6" max="23" step="1" value="6"></label>
+    <label>Bicis a mover como máximo <span class="v" id="bv">40</span><input type="range" id="maxb" min="0" max="200" step="5" value="40"></label>
+    <label>Estaciones a visitar como máximo <span class="v" id="sv">12</span><input type="range" id="maxs" min="1" max="70" step="1" value="12"></label>
+    <label>Bicis extra en la flota <span class="v" id="fv">+0</span><input type="range" id="fleet" min="0" max="300" step="10" value="0"></label>
+    <label>Anclajes extra, en las que más se vacían <span class="v" id="dv">+0</span><input type="range" id="docks" min="0" max="150" step="5" value="0"></label>
+    <label>Repartos al día<select id="rounds"><option value="1">1 (solo a la hora elegida)</option><option value="2">2 (y otro 9 h después)</option><option value="3">3 (cada 6 h)</option><option value="4">4 (cada 6 h y una de cierre, 16 h después)</option><option value="a2">2, antes de las subidas de vacías</option><option value="a3">3, antes de las subidas de vacías</option><option value="a4">4, antes de las subidas de vacías</option></select></label>
+    <button type="button" id="play">Reproducir el día</button>
+  </form>
+
+  <section class="kpis" aria-live="polite">
+    <div class="kpi hoy"><div class="k">Horas de estación sin bicis · hoy</div><div class="n" id="k-emp-hoy">—</div><div class="d">sumadas en las 70 estaciones</div></div>
+    <div class="kpi rep"><div class="k">Horas de estación sin bicis · con reparto</div><div class="n" id="k-emp-rep">—</div><div class="d" id="k-emp-d">—</div></div>
+    <div class="kpi hoy"><div class="k">Viajes perdidos por falta de bici · hoy</div><div class="n" id="k-lost-hoy">—</div><div class="d">gente que llega y no encuentra bici</div></div>
+    <div class="kpi rep"><div class="k">Viajes perdidos · con reparto</div><div class="n" id="k-lost-rep">—</div><div class="d" id="k-lost-d">—</div></div>
+    <div class="kpi"><div class="k">El camión</div><div class="n" id="k-truck">—</div><div class="d" id="k-truck-d">—</div></div>
+    <div class="kpi"><div class="k">La red</div><div class="n" id="k-net">—</div><div class="d" id="k-net-d">—</div></div>
+    <div class="kpi rep"><div class="k">Estaciones sin bici al cerrar el día</div><div class="n" id="k-end">—</div><div class="d" id="k-end-d">—</div></div>
+  </section>
+
+  <section class="race">
+    <div class="clock" id="clock">06:00<small>hora del día</small></div>
+    <div class="map"><canvas id="m0"></canvas><div class="cap" style="color:var(--hoy)"><i style="background:var(--hoy)"></i>Hoy</div><div class="st" id="s0"></div></div>
+    <div class="map"><canvas id="m1"></canvas><div class="cap" style="color:var(--rep)"><i style="background:var(--rep)"></i>Con reparto</div><div class="st" id="s1"></div></div>
+  </section>
+
+  <section class="chart">
+    <h2>Estaciones sin bicis o sin anclajes a lo largo del día</h2>
+    <canvas id="line"></canvas>
+    <div class="legend"><span><i style="background:var(--hoy)"></i>hoy</span><span><i style="background:var(--rep)"></i>con reparto</span><span><i style="background:var(--line); height:8px"></i>lo que se evita</span></div>
+  </section>
+
+  <section class="stops">
+    <h2 id="stops-h">La ruta del camión</h2>
+    <ul id="stops"></ul>
+  </section>
+
+  <p class="note">Modelo de marea media por estación, tipo de día y hora, corregida de lo que las estaciones vacías dejan de prestar, simulado en pasos de 15 minutos durante las 24 horas siguientes al reparto. Exagera la deriva (predice más tiempo fuera de banda del observado), así que las cifras valen para comparar escenarios, no como promesa. Cada parada cuesta como mover 3 bicis y ninguna parada mueve una sola. Las bicis extra se reparten en proporción a la capacidad en los dos escenarios; los anclajes extra van a las estaciones que más horas pasan vacías hoy, en proporción. Datos: GBFS de Dbizi, <code>rates.json</code> del <span id="at"></span>. Rojo: sin bicis. Azul: sin anclajes libres.</p>
+</div>
+
+<script>
+const DATA = __DATA__;
+</script>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const S = DATA.stations, N = S.length, H0 = DATA.h0, NH = 24 - H0, STEP = 4, STOP_BIKES = 3;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  $("at").textContent = DATA.at.slice(0, 10);
+
+  // ---------- modelo: el mismo que la web ----------
+  const order = (H) => { const o = []; for (let i = H - H0; i < NH; i++) o.push(i); for (let i = 0; i < H - H0; i++) o.push(i); return o; };
+  function cost(dep, arr, ord, s0, cap) {
+    let s = s0, oob = 0;
+    for (const i of ord) for (let k = 0; k < STEP; k++) {
+      s = Math.min(cap, Math.max(0, s + (arr[i] - dep[i]) / STEP));
+      if (s <= 0.5 || s >= cap - 0.5) oob++;
+    }
+    return oob / (ord.length * STEP);
+  }
+  // planifica desde un instante: stock de partida por estación y los pasos que quedan de ventana
+  function plan(dt, ord, stock, lam, capArr) {
+    const rows = [];
+    for (let i = 0; i < N; i++) {
+      const r = DATA.rates[dt] && DATA.rates[dt][S[i].id], cap = capArr[i];
+      if (!r || r.days < 5 || !cap) continue;
+      const nw = Math.min(cap, Math.round(stock[i])), c = new Float64Array(cap + 1);
+      for (let s0 = 0; s0 <= cap; s0++) c[s0] = cost(r.dep, r.arr, ord, s0, cap) + lam * (Math.abs(s0 - nw) + (s0 !== nw ? STOP_BIKES : 0));
+      if (cap > 1) c[0] += 1;
+      if (nw - 1 >= 0) c[nw - 1] += 1e6; if (nw + 1 <= cap) c[nw + 1] += 1e6;
+      rows.push({ i, r, cap, now: nw, c });
+    }
+    const B = rows.reduce((a, r) => a + r.now, 0);
+    let best = new Float64Array(B + 1).fill(1e9); best[0] = 0; const ch = [];
+    for (const r of rows) {
+      const nb = new Float64Array(B + 1).fill(1e9), arg = new Uint8Array(B + 1);
+      for (let b = 0; b <= B; b++) for (let k = 0; k <= Math.min(r.cap, b); k++) { const v = best[b - k] + r.c[k]; if (v < nb[b]) { nb[b] = v; arg[b] = k; } }
+      best = nb; ch.push(arg);
+    }
+    let b = B; for (let j = rows.length - 1; j >= 0; j--) { rows[j].opt = ch[j][b]; b -= rows[j].opt; }
+    rows.forEach(r => { r.m = r.opt - r.now; });
+    return { rows, moved: rows.reduce((a, r) => a + Math.max(0, r.m), 0), stops: rows.filter(r => r.m).length };
+  }
+  function planMax(dt, ord, stock, maxB, maxS, capArr) {
+    const ok = (p) => p.moved <= maxB && p.stops <= maxS;
+    let p = plan(dt, ord, stock, 0, capArr); if (ok(p)) return p;
+    let lo = 0, hi = 1, best = null;
+    for (let it = 0; it < 14; it++) { const lam = (lo + hi) / 2, q = plan(dt, ord, stock, lam, capArr); if (ok(q)) { best = q; hi = lam; } else lo = lam; }
+    return best || plan(dt, ord, stock, 1, capArr);
+  }
+  const ROUND_OFFSETS = { 1: [0], 2: [0, 9], 3: [0, 6, 12], 4: [0, 6, 12, 16] };
+  // horario "auto": se simula el día sin reparto, se mide cuánto crece el número de
+  // estaciones vacías en las 3 h siguientes a cada hora, y las rondas van al inicio de
+  // los mayores tramos de subida (separadas >= 3 h). La primera siempre a la hora elegida.
+  function autoRounds(dt, H, ids, caps, rates, base, n) {
+    const ord = order(H), st = Float32Array.from(base), emp = [];
+    for (const hi of ord) { let e = 0; ids.forEach((i, j) => { const r = rates[j]; for (let k = 0; k < STEP; k++) st[i] = Math.min(caps[j], Math.max(0, st[i] + (r.arr[hi] - r.dep[hi]) / STEP)); if (st[i] <= 0.5) e++; }); emp.push(e); }
+    const rise = emp.map((e, o) => (emp[Math.min(NH - 1, o + 3)] - e));
+    const chosen = [0];
+    while (chosen.length < n) {
+      let best = -1, bv = -Infinity;
+      for (let o = 1; o < NH; o++) if (chosen.every(c => Math.abs(c - o) >= 3) && rise[o] > bv) { bv = rise[o]; best = o; }
+      if (best < 0) break; chosen.push(best);
+    }
+    return chosen.sort((a, b) => a - b);
+  }
+  // el día entero: escenario 0 tal cual; escenario 1 con una ronda de reparto en cada hora
+  // prevista, cada una optimizada desde el estado simulado de ese momento
+  function simulateDay(dt, H, maxB, maxS, nrounds, extraFleet = 0, extraDocks = 0) {
+    const ord = order(H), T = ord.length * STEP;
+    const ids = [], caps = [], rates = [];
+    for (let i = 0; i < N; i++) { const r = DATA.rates[dt] && DATA.rates[dt][S[i].id], cap = DATA.cap[S[i].id]; if (r && r.days >= 5 && cap) { ids.push(i); caps.push(cap); rates.push(r); } }
+    // anclajes extra: a las estaciones que más horas pasan vacías tal como están, en proporción
+    if (extraDocks > 0) {
+      const eh = ids.map((i, j) => { const r = rates[j]; let st = Math.min(caps[j], Math.round(r.stock[H - H0])), e = 0;
+        for (const hi of ord) for (let k = 0; k < STEP; k++) { st = Math.min(caps[j], Math.max(0, st + (r.arr[hi] - r.dep[hi]) / STEP)); if (st <= 0.5) e++; } return e; });
+      const tot = eh.reduce((a, v) => a + v, 0) || 1;
+      ids.forEach((i, j) => { caps[j] += Math.round(extraDocks * eh[j] / tot); });
+    }
+    const capArr = new Array(N).fill(0); ids.forEach((i, j) => { capArr[i] = caps[j]; });
+    // flota extra: repartida en proporción a la capacidad, igual en los dos escenarios (el
+    // reparto decide después); así la palanca "más bicis" se mide aparte de la del camión
+    const sumCap = caps.reduce((a, v) => a + v, 0);
+    const base = new Float32Array(N); ids.forEach((i, j) => { base[i] = Math.min(caps[j], Math.round(rates[j].stock[H - H0]) + Math.round(extraFleet * caps[j] / sumCap)); });
+    const roundAt = (typeof nrounds === "string" ? autoRounds(dt, H, ids, caps, rates, base, +nrounds.slice(1)) : ROUND_OFFSETS[nrounds].filter(o => o < NH)).map(o => o * STEP);
+    const traj = [new Float32Array(N * T), new Float32Array(N * T)], emp = [new Uint8Array(T), new Uint8Array(T)], ful = [new Uint8Array(T), new Uint8Array(T)];
+    const lost = [new Float32Array(T), new Float32Array(T)], rounds = [];
+    for (const sc of [0, 1]) {
+      const st = Float32Array.from(base);
+      for (let t = 0; t < T; t++) {
+        const k = roundAt.indexOf(t);
+        if (sc === 1 && k >= 0) {                              // ronda: optimizar desde el estado actual
+          const p = planMax(dt, ord.slice(Math.floor(t / STEP)), st, maxB, maxS, capArr);
+          const mv = {}; p.rows.forEach(r => { if (r.m) mv[r.i] = r.m; st[r.i] = r.opt; });
+          rounds.push({ t, hour: ord[Math.floor(t / STEP)] + H0, moves: mv, moved: p.moved, stops: p.stops, snap: p.rows.map(r => ({ i: r.i, now: r.now, opt: r.opt, cap: r.cap })) });
+        }
+        const hi = ord[Math.floor(t / STEP)];
+        ids.forEach((i, j) => {
+          const r = rates[j], want = r.dep[hi] / STEP;
+          if (st[i] <= 0.5) lost[sc][t] += want;
+          st[i] = Math.min(caps[j], Math.max(0, st[i] + (r.arr[hi] - r.dep[hi]) / STEP));
+          traj[sc][i * T + t] = st[i];
+          if (st[i] <= 0.5) emp[sc][t]++; else if (st[i] >= caps[j] - 0.5) ful[sc][t]++;
+        });
+      }
+    }
+    const cum = (a) => { let c = 0; return Array.from(a, v => (c += v)); };
+    return { T, ord, ids, caps, base, traj, emp, ful, lost: [cum(lost[0]), cum(lost[1])], rounds, fleet: Math.round(ids.reduce((a, i) => a + base[i], 0)), docks: sumCap,
+             hEmp: [emp[0].reduce((a, v) => a + v, 0) / STEP, emp[1].reduce((a, v) => a + v, 0) / STEP],
+             moved: rounds.reduce((a, r) => a + r.moved, 0), stops: rounds.reduce((a, r) => a + r.stops, 0) };
+  }
+  function route(moves) {                      // vecino más cercano por las paradas, empezando donde más sobra
+    let ids = Object.keys(moves).map(Number); if (!ids.length) return [];
+    let cur = ids.reduce((a, i) => (moves[i] < moves[a] ? i : a));
+    const out = [cur]; ids = ids.filter(i => i !== cur);
+    while (ids.length) { const nx = ids.reduce((a, i) => (d2(i, cur) < d2(a, cur) ? i : a)); out.push(nx); ids = ids.filter(i => i !== nx); cur = nx; }
+    return out;
+  }
+  const d2 = (a, b) => (S[a].x - S[b].x) ** 2 + (S[a].y - S[b].y) ** 2;
+
+  // ---------- dibujo ----------
+  const xs = S.map(s => s.x), ys = S.map(s => s.y);
+  const X0 = Math.min(...xs), X1 = Math.max(...xs), Y0 = Math.min(...ys), Y1 = Math.max(...ys);
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+    if (cv.width !== Math.round(r.width * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+    const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return [g, r.width, r.height];
+  }
+  function proj(i, w, h) {
+    const pad = 22, sx = (w - 2 * pad) / (X1 - X0), sy = (h - 2 * pad) / (Y1 - Y0), k = Math.min(sx, sy);
+    const ox = (w - k * (X1 - X0)) / 2, oy = (h - k * (Y1 - Y0)) / 2;
+    return [ox + (S[i].x - X0) * k, h - (oy + (S[i].y - Y0) * k)];
+  }
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  function drawMap(cv, sc, t, truck) {
+    const [g, w, h] = fit(cv); g.clearRect(0, 0, w, h);
+    const Q = state.sim, T = Q.T, r1 = Q.rounds[0];
+    if (truck && sc === 1 && state.route.length) {               // la ruta de la primera ronda y el camión avanzando
+      g.strokeStyle = "rgba(127,212,255,.35)"; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath();
+      state.route.forEach((i, k) => { const [x, y] = proj(i, w, h); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); g.setLineDash([]);
+    }
+    // ronda en curso durante el día (a partir de la segunda): sus cifras se muestran unos pasos
+    const live = sc === 1 && t >= 0 ? Q.rounds.find(r => r.t > 0 && t >= r.t && t < r.t + 6) : null;
+    Q.ids.forEach((i, j) => {
+      const [x, y] = proj(i, w, h), cap = Q.caps[j];
+      let s;
+      if (t < 0) s = sc && truck && truck.done.has(i) && r1 ? Q.base[i] + (r1.moves[i] || 0) : Q.base[i];
+      else { const ti = Math.min(T - 1, Math.floor(t)), f = Math.min(1, t - ti), a = Q.traj[sc][i * T + ti], b = Q.traj[sc][i * T + Math.min(T - 1, ti + 1)]; s = a + (b - a) * f; }
+      const rad = 3 + 2.2 * Math.sqrt(cap), empty = s <= 0.5, full = s >= cap - 0.5;
+      g.beginPath(); g.arc(x, y, rad, 0, 6.283);
+      g.fillStyle = empty ? css("--empty") : full ? css("--full") : css("--ok"); g.globalAlpha = empty || full ? .95 : .35 + .5 * s / cap; g.fill(); g.globalAlpha = 1;
+      if (!empty && !full) { g.beginPath(); g.arc(x, y, rad * Math.sqrt(s / cap), 0, 6.283); g.fillStyle = "rgba(232,238,244,.55)"; g.fill(); }
+      const m = t < 0 ? (sc && truck && truck.done.has(i) && r1 ? r1.moves[i] : 0) : (live ? live.moves[i] : 0);
+      if (m) {
+        g.font = '500 10px "IBM Plex Mono", monospace'; g.textAlign = "center"; g.textBaseline = "bottom";
+        g.fillStyle = m > 0 ? "#5fb87a" : css("--empty"); g.fillText((m > 0 ? "+" : "") + m, x, y - rad - 2);
+      }
+    });
+    if (truck && sc === 1 && truck.pos) {
+      const [x, y] = truck.pos; g.beginPath(); g.arc(x, y, 6, 0, 6.283); g.fillStyle = css("--rep"); g.fill();
+      g.beginPath(); g.arc(x, y, 10, 0, 6.283); g.strokeStyle = css("--rep"); g.globalAlpha = .4; g.stroke(); g.globalAlpha = 1;
+    }
+  }
+  function drawLine(t) {
+    const cv = $("line"), [g, w, h] = fit(cv); g.clearRect(0, 0, w, h);
+    const Q = state.sim, T = Q.T, padL = 30, padR = 8, padT = 10, padB = 22;
+    const ymax = Math.max(4, ...Q.emp[0].map((v, i) => v + Q.ful[0][i]), ...Q.emp[1].map((v, i) => v + Q.ful[1][i])) * 1.1;
+    const X = (i) => padL + (w - padL - padR) * i / (T - 1), Y = (v) => h - padB - (h - padB - padT) * v / ymax;
+    g.strokeStyle = css("--line"); g.lineWidth = 1; g.font = '10px "IBM Plex Mono", monospace'; g.fillStyle = css("--ink-3"); g.textAlign = "right";
+    for (const v of [0, Math.round(ymax / 3), Math.round(2 * ymax / 3)]) { g.beginPath(); g.moveTo(padL, Y(v)); g.lineTo(w - padR, Y(v)); g.stroke(); g.fillText(v, padL - 6, Y(v) + 3); }
+    for (const r of Q.rounds) { g.strokeStyle = "rgba(127,212,255,.45)"; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(X(r.t), padT); g.lineTo(X(r.t), h - padB); g.stroke(); g.setLineDash([]); }
+    g.textAlign = "center"; Q.ord.forEach((hi, k) => { if (k % 3 === 0) g.fillText(String(hi + H0).padStart(2, "0") + "h", X(k * STEP), h - 6); });
+    const tf = Math.max(0, Math.min(T - 1, t)), ti = Math.floor(tf), f = tf - ti;
+    // puntos enteros hasta ti y un último punto interpolado: la curva desliza en vez de ir a golpes
+    const series = (sc) => {
+      const pts = Array.from({ length: ti + 1 }, (_, i) => [X(i), Y(Q.emp[sc][i] + Q.ful[sc][i])]);
+      if (f > 0 && ti + 1 < T) { const v0 = Q.emp[sc][ti] + Q.ful[sc][ti], v1 = Q.emp[sc][ti + 1] + Q.ful[sc][ti + 1]; pts.push([X(tf), Y(v0 + (v1 - v0) * f)]); }
+      return pts;
+    };
+    const a = series(0), b = series(1);
+    g.beginPath(); a.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+    for (let i = b.length - 1; i >= 0; i--) g.lineTo(b[i][0], b[i][1]); g.closePath(); g.fillStyle = "rgba(230,162,60,.14)"; g.fill();
+    for (const [col, ser] of [[css("--hoy"), a], [css("--rep"), b]]) {
+      g.beginPath(); ser.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.strokeStyle = col; g.lineWidth = 2; g.stroke();
+      const [x, y] = ser[ser.length - 1]; g.beginPath(); g.arc(x, y, 3.5, 0, 6.283); g.fillStyle = col; g.fill();
+    }
+  }
+  function drawStops() {
+    const Q = state.sim, T = Q.T, ul = $("stops"); ul.innerHTML = "";
+    $("stops-h").textContent = Q.moved ? `El camión: ${Q.rounds.length} ${Q.rounds.length > 1 ? "rondas" : "ronda"}, ${Q.stops} paradas, ${Q.moved} bicis` : "Sin reparto con estos topes";
+    for (const rd of Q.rounds) {
+      const h = document.createElement("li"); h.className = "rh";
+      h.innerHTML = `<div class="m" style="font-size:.8rem;color:var(--rep)">${String(rd.hour).padStart(2, "0")}:00</div><div class="nm" style="color:var(--ink-2)">ronda: ${rd.moved} bicis en ${rd.stops} estaciones</div>`;
+      ul.appendChild(h);
+      for (const i of route(rd.moves)) {
+        const sn = rd.snap.find(x => x.i === i), m = rd.moves[i];
+        const li = document.createElement("li");
+        li.innerHTML = `<div class="m ${m > 0 ? "add" : "rm"}">${m > 0 ? "+" : ""}${m}</div><div><div class="nm">${S[i].n} <small style="color:var(--ink-3)">${sn.now}→${sn.opt} de ${sn.cap}</small></div><canvas></canvas></div>`;
+        ul.appendChild(li);
+        const [g, w, hh] = fit(li.querySelector("canvas"));
+        for (const [sc, col] of [[0, css("--hoy")], [1, css("--rep")]]) {
+          g.beginPath(); for (let t = 0; t < T; t++) { const v = Q.traj[sc][i * T + t], x = w * t / (T - 1), y = hh - 2 - (hh - 4) * v / sn.cap; t ? g.lineTo(x, y) : g.moveTo(x, y); }
+          g.strokeStyle = col; g.lineWidth = 1.5; g.stroke();
+        }
+        g.strokeStyle = css("--line"); g.beginPath(); g.moveTo(0, hh - 1.5); g.lineTo(w, hh - 1.5); g.stroke();
+      }
+    }
+  }
+  const fmt = (v, d = 0) => v.toLocaleString("es-ES", { maximumFractionDigits: d, minimumFractionDigits: d });
+  function kpis(t) {
+    const Q = state.sim, T = Q.T, tt = Math.max(0, Math.min(T - 1, t));
+    const he = [0, 1].map(sc => Q.emp[sc].slice(0, tt + 1).reduce((a, v) => a + v, 0) / STEP);
+    $("k-emp-hoy").textContent = fmt(he[0]) + " h"; $("k-emp-rep").textContent = fmt(he[1]) + " h";
+    $("k-emp-d").textContent = he[0] > 0 ? `${fmt((1 - he[1] / he[0]) * 100)} % menos` : "—";
+    $("k-lost-hoy").textContent = fmt(Q.lost[0][tt]); $("k-lost-rep").textContent = fmt(Q.lost[1][tt]);
+    $("k-lost-d").textContent = Q.lost[0][tt] > 0 ? `${fmt(Q.lost[0][tt] - Q.lost[1][tt])} viajes salvados` : "—";
+    $("k-end").innerHTML = `${Q.emp[1][T - 1]} <small>de ${Q.ids.length}</small>`; $("k-end-d").textContent = `hoy serían ${Q.emp[0][T - 1]}`;
+    $("k-net").innerHTML = `${Q.fleet} <small>bicis</small>`; $("k-net-d").textContent = `en ${Q.docks} anclajes (${fmt(100 * Q.fleet / Q.docks)} % de ocupación)`;
+    $("k-truck").innerHTML = `${Q.moved} <small>bicis</small>`; $("k-truck-d").textContent = `${Q.rounds.length} ${Q.rounds.length > 1 ? "rondas" : "ronda"} · ${Q.stops} paradas · 1.ª ronda ${fmt(state.km, 1)} km en línea recta`;
+    for (const sc of [0, 1]) $("s" + sc).innerHTML = `<span style="color:var(--empty)">${Q.emp[sc][tt]}</span> sin bicis<br><span style="color:var(--full)">${Q.ful[sc][tt]}</span> llenas`;
+    const h = Q.ord[Math.floor(tt / STEP)] + H0, m = (tt % STEP) * 15;
+    $("clock").innerHTML = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}<small>${t < 0 ? "antes de abrir: el camión reparte" : "hora del día"}</small>`;
+  }
+
+  // ---------- animación ----------
+  const state = { sim: null, route: [], km: 0, raf: 0 };
+  function recompute() {
+    const dt = $("dt").value, H = +$("h").value, mb = +$("maxb").value, ms = +$("maxs").value;
+    const nr = $("rounds").value.startsWith("a") ? $("rounds").value : +$("rounds").value;
+    const ef = +$("fleet").value, ed = +$("docks").value;
+    $("hv").textContent = String(H).padStart(2, "0") + ":00"; $("bv").textContent = mb; $("sv").textContent = ms; $("fv").textContent = "+" + ef; $("dv").textContent = "+" + ed;
+    state.sim = simulateDay(dt, H, mb, ms, nr, ef, ed); state.route = state.sim.rounds.length ? route(state.sim.rounds[0].moves) : [];
+    state.km = state.route.reduce((a, i, k) => k ? a + Math.sqrt(d2(i, state.route[k - 1])) / 1000 : 0, 0);
+    drawStops(); play();
+  }
+  function play() {
+    cancelAnimationFrame(state.raf);
+    const T = state.sim.T, hasRoute = state.route.length > 0;
+    if (reduce) { drawMap($("m0"), 0, T - 1); drawMap($("m1"), 1, T - 1); drawLine(T - 1); kpis(T - 1); return; }
+    const ROUTE_MS = hasRoute ? 900 + 350 * state.route.length : 0, DAY_MS = 18000, t0 = performance.now();
+    const pts = state.route.map(i => proj(i, $("m1").getBoundingClientRect().width, $("m1").getBoundingClientRect().height));
+    const tick = (now) => {
+      const e = now - t0;
+      if (e < ROUTE_MS) {                       // fase 1: el camión recorre la ruta
+        const u = (e / ROUTE_MS) * Math.max(1, state.route.length - 1), k = Math.min(state.route.length - 2, Math.floor(u)), f = u - k;
+        const a = pts[k] || pts[0], b = pts[k + 1] || a;
+        const truck = { pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], done: new Set(state.route.slice(0, Math.min(state.route.length, Math.floor(u) + 1))) };
+        drawMap($("m0"), 0, -1); drawMap($("m1"), 1, -1, truck); drawLine(0); kpis(-1);
+      } else {                                  // fase 2: el día corre en los dos mapas
+        const tf = Math.min(T - 1, (e - ROUTE_MS) / DAY_MS * (T - 1));
+        drawMap($("m0"), 0, tf); drawMap($("m1"), 1, tf); drawLine(tf); kpis(Math.floor(tf));
+        if (tf >= T - 1) return;
+      }
+      state.raf = requestAnimationFrame(tick);
+    };
+    state.raf = requestAnimationFrame(tick);
+  }
+  $("ctl").addEventListener("input", recompute);
+  $("ctl").addEventListener("submit", (e) => e.preventDefault());
+  $("play").addEventListener("click", play);
+  addEventListener("resize", () => { if (state.sim) { const T = state.sim.T; drawMap($("m0"), 0, T - 1); drawMap($("m1"), 1, T - 1); drawLine(T - 1); drawStops(); } });
+  recompute();
+})();
+</script>
