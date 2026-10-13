@@ -72,18 +72,27 @@ button#ev:hover svg{color:var(--ink)}
 button#ev .n{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:14px; color:var(--ink)}
 #ev-dlg{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:4px;
   padding:18px 22px; width:min(520px, calc(100vw - 32px)); max-height:80vh; font-size:13px}
-#ev-dlg::backdrop, #plan-dlg::backdrop{background:rgba(6,9,12,.6); backdrop-filter:blur(3px)}
-#plan-dlg{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:0.25rem;
+#ev-dlg::backdrop, #plan-dlg::backdrop, #rep-dlg::backdrop{background:rgba(6,9,12,.6); backdrop-filter:blur(3px)}
+#plan-dlg, #rep-dlg{background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:0.25rem;
   padding:1.1rem 1.4rem; width:min(34rem, calc(100vw - 2rem)); max-height:85vh; font-size:0.8125rem}
-#plan-form{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0.6rem 0.9rem; margin-top:0.8rem}
-#plan-form label{display:flex; flex-direction:column; gap:0.25rem; font-size:0.6875rem; color:var(--ink-3);
+#plan-form, #rep-form{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0.6rem 0.9rem; margin-top:0.8rem}
+#plan-form label, #rep-form label{display:flex; flex-direction:column; gap:0.25rem; font-size:0.6875rem; color:var(--ink-3);
   text-transform:uppercase; letter-spacing:.05em}
-#plan-form select, #plan-form input[type=date], #plan-form input[type=time]{font:inherit; font-size:0.8125rem;
+#plan-form select, #plan-form input[type=date], #plan-form input[type=time], #rep-form select{font:inherit; font-size:0.8125rem;
   text-transform:none; letter-spacing:0; color:var(--ink); background:var(--bg, #0c1116);
   border:1px solid var(--line); border-radius:0.2rem; padding:0.4rem 0.5rem; min-width:0}
-#plan-form .chk{flex-direction:row; align-items:center; gap:0.5rem; grid-column:1 / -1;
+#plan-form .chk, #rep-form .chk{flex-direction:row; align-items:center; gap:0.5rem; grid-column:1 / -1;
   text-transform:none; letter-spacing:0; font-size:0.8125rem; color:var(--ink-2)}
-#plan-out{margin-top:1rem; line-height:1.5}
+#plan-out, #rep-out{margin-top:1rem; line-height:1.5}
+#rep-form input[type=range]{width:100%; accent-color:#e6a23c}
+#rep-form .hv{font-family:"IBM Plex Mono",monospace; font-size:0.9rem; color:var(--ink); text-transform:none; letter-spacing:0}
+#rep-out .kpi{display:flex; gap:1.2rem; flex-wrap:wrap; margin:0.4rem 0 0.6rem}
+#rep-out .kpi b{display:block; font-family:"IBM Plex Mono",monospace; font-size:1.25rem; font-weight:500}
+#rep-out .kpi span{font-size:0.6875rem; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em}
+#rep-out ul{list-style:none; margin:0.4rem 0 0; padding:0; columns:2; column-gap:1.2rem; font-size:0.75rem}
+#rep-out li{padding:0.12rem 0; break-inside:avoid}
+#rep-out .add{color:#5fb87a} #rep-out .rm{color:#e66767}
+#rep-apply, #rep-clear{margin-top:0.8rem}
 #plan-out h3{margin:0.9rem 0 0.3rem; font-size:0.6875rem; font-weight:500; color:var(--ink-3);
   text-transform:uppercase; letter-spacing:.06em}
 #plan-out .row{display:flex; gap:0.6rem; align-items:baseline; padding:0.2rem 0}
@@ -94,7 +103,7 @@ button#ev .n{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:
 .dlg-head{display:flex; justify-content:space-between; align-items:baseline; gap:16px}
 .dlg-head h2{margin:0; font-family:"Bodoni Moda",serif; font-weight:500; font-size:22px}
 #ev-close{min-width:0; padding:4px 9px; font-size:13px}
-#plan-close{min-width:0; padding:0.25rem 0.55rem; font-size:0.8125rem}
+#plan-close, #rep-close{min-width:0; padding:0.25rem 0.55rem; font-size:0.8125rem}
 #ev-counts{font-size:12px; color:var(--ink-3); margin-top:6px}
 #ev-list{list-style:none; margin:12px 0 0; padding:0; line-height:1.45}
 #ev-list li{padding:7px 0; border-top:1px solid var(--line); display:flex; gap:14px; align-items:baseline}
@@ -192,6 +201,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <div class="stat"><span class="k"><span class="dot" style="background:var(--empty)"></span>Sin bicis</span><span class="v" id="s-emp">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:var(--full)"></span>Sin anclajes</span><span class="v" id="s-ful">—<small>/70</small></span></div>
   <div class="stat"><span class="k"><span class="dot" style="background:#e6c56b"></span>Cerradas</span><span class="v" id="s-clo">—<small>/70</small></span></div>
+  <div class="stat" id="s-rep-row" hidden style="cursor:pointer" title="Quitar el reparto del mapa"><span class="k"><span class="dot" style="background:#5fb87a"></span>Reparto en el mapa <small>(clic: quitar)</small></span><span class="v" id="s-rep">—</span></div>
   <div class="stat" id="s-risk-row" hidden style="cursor:pointer" title="Ir al directo para ver cuáles"><span class="k"><span class="dot" style="background:#e6a23c"></span>Riesgo de vaciarse <small>(ahora +30 min)</small></span><span class="v" id="s-risk">—</span></div>
   <div class="stat" id="s-dis-row" hidden title="Bicis ancladas que el sistema da por averiadas: ocupan anclaje y no se pueden coger."><span class="k"><span class="dot" style="background:#5a3d3d"></span>Bicis averiadas</span><span class="v" id="s-dis">—</span></div>
   <button id="ev" hidden aria-haspopup="dialog" aria-controls="ev-dlg">
@@ -225,12 +235,26 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
   <button id="play" aria-label="Reproducir o pausar el día narrado" title="El día narrado: lo que seis semanas de datos han enseñado">Reproducir</button>
   <button id="rate" aria-label="Paso entre frames" title="Paso: con menos frames las barras deslizan en vez de temblar">5 min</button>
   <button id="plan-btn" aria-haspopup="dialog" aria-controls="plan-dlg" title="¿Tendré bici al salir y sitio al llegar?">Planifica</button>
+  <button id="rep-btn" aria-haspopup="dialog" aria-controls="rep-dlg" title="Si saliera un camión ahora: dónde sobran y dónde faltan bicis">Reparto</button>
   <div id="track">
     <canvas id="strip" height="28" aria-hidden="true"></canvas>
     <input id="scrub" type="range" min="0" max="100" value="0" step="1" aria-label="Momento del timelapse">
   </div>
   <span id="speed"></span>
 </div>
+
+<dialog id="rep-dlg" aria-labelledby="rep-title">
+  <div class="dlg-head"><h2 id="rep-title">Reparto óptimo</h2><button id="rep-close" aria-label="Cerrar">✕</button></div>
+  <form id="rep-form">
+    <label>Tipo de día<select id="rep-dt"><option value="lab">laborable</option><option value="sab">sábado</option><option value="dom">domingo o festivo</option></select></label>
+    <label>Hora del reparto <span class="hv" id="rep-hv">06:00</span><input type="range" id="rep-h" min="6" max="23" step="1" value="6"></label>
+    <label class="chk"><input type="checkbox" id="rep-live"> Partir del estado real de ahora mismo</label>
+  </form>
+  <div id="rep-out" aria-live="polite"></div>
+  <button id="rep-apply" type="button">Ver en el mapa</button>
+  <button id="rep-clear" type="button" hidden>Quitar del mapa</button>
+  <p class="dlg-note">Con la flota que hay, cuántas bicis debería tener cada estación a esa hora para pasar el menor tiempo posible sin bicis o sin anclajes en las 24 h siguientes. Modelo de marea media por hora, corregido de lo que las estaciones vacías dejan de prestar (<code>analysis/reparto.md</code>). Exagera la deriva: la mejora es relativa, no una promesa.</p>
+</dialog>
 
 <dialog id="plan-dlg" aria-labelledby="plan-title">
   <div class="dlg-head"><h2 id="plan-title">Planifica tu viaje</h2><button id="plan-close" aria-label="Cerrar">✕</button></div>
@@ -889,7 +913,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     renderTerrain();
     ctx.drawImage(tcv, 0, 0, W, H);
 
-    const half = SIDE / 2, labels = [];
+    const half = SIDE / 2, labels = [], repLabels = [];
     const rset = riskSet();
     let tot = 0, emp = 0, ful = 0, clo = 0, dis = 0;
     for (let i = 0; i < N; i++) if (!isOpen(fr, i)) clo++;
@@ -913,6 +937,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       occlude(s, h, half);
       if (rset && open && rset.has(s.id) && pos >= NF - 1.01) riskRing(s, h);  // solo en el directo: en el histórico confunde
       if (storyRings && storyRings.has(s.id) && performance.now() < holdUntil) storyRing(s, h);
+      if (REP && REP.has(s.id) && !repDlg.open) repLabels.push([s, h, REP.get(s.id)]);
       if (!open) { if (!shut) labels.push([i, h, "closed"]); }
       else if (nb <= 0 || nb >= cap) labels.push([i, h, nb >= cap]);
     }
@@ -938,6 +963,13 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       ctx.fillStyle = full === "closed" ? "#f0d47a" : full ? "#9cc6ff" : "#ffb3b3"; ctx.fillText(txt, X, Y);
     }
 
+    for (const [s, h, m] of repLabels) {         // reparto: disco verde (añadir) o rojo (retirar) con la cifra
+      const c = iso(s.x, s.y, s.z + h + 16), r = 7 + Math.min(8, Math.abs(m));
+      ctx.beginPath(); ctx.arc(sx(c), sy(c), r, 0, 6.284);
+      ctx.fillStyle = m > 0 ? "rgba(95,184,122,.85)" : "rgba(230,103,103,.85)"; ctx.fill();
+      ctx.font = '600 10px "IBM Plex Mono", monospace'; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#0c1116"; ctx.fillText((m > 0 ? "+" : "") + m, sx(c), sy(c));
+    }
     compass();
     el.speed.textContent = HOURS + " h · " + NF + " frames" +
       (zoom > 1.01 ? " · " + zoom.toFixed(1) + "\u00d7" : "");
@@ -1303,6 +1335,104 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   $p("plan-form").addEventListener("input", planRender);
   $p("plan-form").addEventListener("submit", (ev) => ev.preventDefault());
 
+  // --- reparto óptimo en el navegador: marea por hora (rates.json) + DP exacta ---
+  const repDlg = document.getElementById("rep-dlg");
+  let RATES = null, REP = null;                   // REP: Map id -> bicis a mover (+ añade, - retira)
+  const el2 = { rep: document.getElementById("s-rep"), repRow: document.getElementById("s-rep-row") };
+  const STEPS_H = 4;
+  function repCost(dep, arr, order, s0, cap) {   // fracción de pasos fuera de banda en las 24 h
+    let s = s0, oob = 0;
+    for (const i of order) for (let k = 0; k < STEPS_H; k++) {
+      s = Math.min(cap, Math.max(0, s + (arr[i] - dep[i]) / STEPS_H));
+      if (s <= 0.5 || s >= cap - 0.5) oob++;
+    }
+    return oob / (order.length * STEPS_H);
+  }
+  function repPlan(dt, H, live) {
+    const h0 = RATES.h0, nh = 24 - h0, order = [];
+    for (let i = H - h0; i < nh; i++) order.push(i);
+    for (let i = 0; i < H - h0; i++) order.push(i);     // la noche no mueve nada: ventana de 24 h
+    const rows = [];
+    for (let i = 0; i < N; i++) {
+      const r = RATES.rates[dt] && RATES.rates[dt][S[i].id], cap = RATES.cap[S[i].id];
+      if (!r || r.days < 5 || !cap) continue;
+      const now = Math.round(live ? F[NF - 1].b[i] : r.stock[H - h0]);
+      const cost = new Float64Array(cap + 1);
+      for (let s0 = 0; s0 <= cap; s0++) cost[s0] = repCost(r.dep, r.arr, order, s0, cap);
+      rows.push({ i, id: S[i].id, cap, now: Math.min(cap, now), cost });
+    }
+    const B = rows.reduce((a, r) => a + r.now, 0);
+    let best = new Float64Array(B + 1).fill(1e9); best[0] = 0;
+    const choice = [];
+    for (const r of rows) {                        // DP exacta: mejor coste con b bicis en las primeras estaciones
+      const nb = new Float64Array(B + 1).fill(1e9), arg = new Uint8Array(B + 1);
+      for (let b = 0; b <= B; b++) for (let k = 0; k <= Math.min(r.cap, b); k++) {
+        const v = best[b - k] + r.cost[k];
+        if (v < nb[b]) { nb[b] = v; arg[b] = k; }
+      }
+      best = nb; choice.push(arg);
+    }
+    let b = B;
+    for (let j = rows.length - 1; j >= 0; j--) { rows[j].opt = choice[j][b]; b -= rows[j].opt; }
+    const costNow = rows.reduce((a, r) => a + r.cost[r.now], 0) / rows.length;
+    const costOpt = rows.reduce((a, r) => a + r.cost[r.opt], 0) / rows.length;
+    return { rows, B, costNow, costOpt };
+  }
+  function repRender() {
+    if (!RATES) return;
+    const live = $p("rep-live").checked, dt = $p("rep-dt").value, H = +$p("rep-h").value;
+    $p("rep-hv").textContent = pad(H) + ":00";
+    const plan = repPlan(dt, H, live);
+    const mv = plan.rows.map(r => ({ ...r, m: r.opt - r.now })).filter(r => r.m !== 0).sort((a, c) => a.m - c.m);
+    const moved = mv.filter(r => r.m > 0).reduce((a, r) => a + r.m, 0);
+    REP = new Map(mv.filter(r => Math.abs(r.m) >= 1).map(r => [r.id, r.m]));
+    $p("rep-out").innerHTML =
+      `<div class="kpi"><div><b>${moved}</b><span>bicis a mover</span></div>` +
+      `<div><b>${mv.filter(r => Math.abs(r.m) >= 2).length}</b><span>paradas (≥2 bicis)</span></div>` +
+      `<div><b>${(plan.costNow * 100).toFixed(0)} % → ${(plan.costOpt * 100).toFixed(0)} %</b><span>tiempo fuera de banda (simulado)</span></div></div>` +
+      "<ul>" + mv.filter(r => Math.abs(r.m) >= 2).map(r =>
+        `<li class="${r.m > 0 ? "add" : "rm"}">${r.m > 0 ? "+" : ""}${r.m} ${nombre(S[r.i])} <small>(${r.now}→${r.opt})</small></li>`).join("") + "</ul>";
+  }
+  async function repOpen() {
+    setPlaying(false);
+    const nowH = +fTime.format(new Date()).split(":")[0];
+    $p("rep-live").disabled = !SRC || nowH < 6;
+    if (!$p("rep-live").disabled && !$p("rep-live").dataset.touched) $p("rep-live").checked = true;
+    repSync();
+    repDlg.showModal();
+    if (!RATES) {
+      $p("rep-out").textContent = "Cargando la marea…";
+      try { const r = await fetch("rates.json?t=" + Date.now(), { cache: "no-store" }); RATES = await r.json(); }
+      catch (err) { $p("rep-out").textContent = "No se pudo cargar la marea."; return; }
+    }
+    repRender();
+  }
+  function repSync() {                           // "ahora": hora y tipo de día de hoy, bloqueados
+    const live = $p("rep-live").checked && !$p("rep-live").disabled;
+    $p("rep-h").disabled = live; $p("rep-dt").disabled = live;
+    if (live) {
+      const d = new Date(), iso = fISO.format(d);
+      $p("rep-h").value = Math.max(6, +fTime.format(d).split(":")[0]);
+      $p("rep-dt").value = (PLAN && PLAN.holidays.includes(iso)) || d.getDay() === 0 ? "dom" : d.getDay() === 6 ? "sab" : "lab";
+    }
+    $p("rep-hv").textContent = pad(+$p("rep-h").value) + ":00";
+  }
+  $p("rep-btn").addEventListener("click", repOpen);
+  $p("rep-close").addEventListener("click", () => repDlg.close());
+  repDlg.addEventListener("click", (ev) => { if (ev.target === repDlg) repDlg.close(); });
+  $p("rep-form").addEventListener("input", (ev) => { if (ev.target.id === "rep-live") ev.target.dataset.touched = 1; repSync(); repRender(); });
+  $p("rep-form").addEventListener("submit", (ev) => ev.preventDefault());
+  $p("rep-apply").addEventListener("click", () => {
+    repDlg.close();
+    el2.repRow.hidden = !REP || !REP.size;
+    $p("rep-clear").hidden = el2.repRow.hidden;
+    if (REP) el2.rep.textContent = [...REP.values()].filter(v => v > 0).reduce((a, v) => a + v, 0) + " bicis";
+    draw();
+  });
+  function repClear() { REP = null; el2.repRow.hidden = true; $p("rep-clear").hidden = true; draw(); }
+  el2.repRow.addEventListener("click", repClear);
+  $p("rep-clear").addEventListener("click", () => { repClear(); repDlg.close(); });
+
   // agenda en un modal: el panel solo lleva la cuenta
   const dlg = document.getElementById("ev-dlg");
   el.ev.addEventListener("click", () => { setPlaying(false); dlg.showModal(); });
@@ -1366,7 +1496,7 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   });
   const HOUR = () => Math.max(1, 12 / STEPS[step]);   // frames que caben en una hora
   addEventListener("keydown", (e) => {
-    if (dlg.open || planDlg.open) return;       // con un modal abierto, los atajos no
+    if (dlg.open || planDlg.open || repDlg.open) return;   // con un modal abierto, los atajos no
     if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
     else if (e.key === "ArrowRight") { setPlaying(false); pos = Math.min(NF-1, pos+(e.shiftKey ? HOUR() : 1)); draw(); }   // shift: una hora
     else if (e.key === "ArrowLeft")  { setPlaying(false); pos = Math.max(0, pos-(e.shiftKey ? HOUR() : 1)); draw(); }

@@ -435,6 +435,10 @@ tiene su informe completo en `analysis/`.
 | 2026-10-01 | ¿Predice un modelo fundacional zero-shot? | Empata con la persistencia en MAE; su valor es la banda p10-p90 calibrada (0.79/0.80) | `forecast_eval.md` |
 | 2026-10-01 | ¿Se pueden trazar viajes de madrugada? | 24 viajes validados (13 km/h, r=0.84); la madrugada solo existe el finde — la vuelta de fiesta es medible | `night_trips.md` |
 | 2026-10-01 | ¿Hasta dónde llega la alarma de vaciado? | Techo de precisión ~0.25 con recall útil; por cluster no aporta; de noche inútil | `alarm_tuning.md` |
+| 2026-10-02 | ¿Detectan las bicis el pintxo-pote? | Jueves de Gros confirmado (69 bares, estancias de 3 h); el miércoles de Pio Baroja y el lunes de Sagastieder eran deporte | `pintxopote.md` |
+| 2026-10-02 | ¿Qué otras rutinas semanales hay? | El domingo (Ondarreta, vermú, paseo del Ayuntamiento) es la más fuerte; el martes de Andoain kalea sigue sin explicar | `weekly_flows.md` |
+| 2026-10-13 | ¿Son fiables las probabilidades del planificador? | Vacía y sin eléctricas calibradas (+17-20 % sobre la media de red); «llena» no | `plan_calibration.md` |
+| 2026-10-13 | **Reparto óptimo, primera vuelta** (etapas 1, 3 sin meteo, 4) | La red está el 15 % del tiempo fuera de banda, casi todo vacío y cuesta arriba; mover ~160 bicis del llano a la periferia a las 06:00 lo bajaría a ~6 % (simulado, optimista) | `reparto.md` |
 
 ### Corriendo solo (todo dentro de la VM gratuita)
 
@@ -447,6 +451,11 @@ tiene su informe completo en `analysis/`.
   sube `plan.json`; el botón *Planifica* de la web da el semáforo de salida y llegada con
   alternativas cercanas. Calibración en `analysis/plan_calibration.md`: vacía y sin eléctricas
   fiables; «llena» solo orientativa.
+- **Reparto óptimo en la web**: el mismo cron nocturno sube `rates.json` (marea por estación ×
+  tipo de día × hora, corregida de censura y con conservación, más el stock típico); el botón
+  *Reparto* simula y optimiza en el navegador (DP exacta, <20 ms) para la hora y tipo de día
+  elegidos —o partiendo del estado real de ahora— y pinta en el mapa dónde añadir y retirar bicis.
+  Método y caveats en `analysis/reparto.md`.
 
 **Principio vigente**: en producción solo lo que quepa en la e2-micro gratuita.
 El portátil vale para análisis puntuales, no para servicios.
@@ -467,11 +476,10 @@ El portátil vale para análisis puntuales, no para servicios.
 
 | experimento | espera a | cuándo |
 |---|---|---|
-| **Reparto óptimo, etapa 1**: tiempo fuera de banda por estación × día-tipo × hora (§18, [`reparto-optimo.md`](reparto-optimo.md)) | nada — pedía 3-4 semanas y hay 6 | **lista ya** |
 | Elasticidad a la lluvia | días mojados y secos comparables de otoño | finales de octubre |
 | **Pintxo-pote, segunda pasada** (`analysis/pintxopote.py`): confirmar el jueves de Gros (Gran Vía + Bermingham ×1.5), el miércoles de Pio Baroja/Txapillo y el lunes de Sagastieder con el doble de semanas, y validación nativa del mapa | más ocurrencias de cada día de la semana (ahora solo ~6) | finales de octubre |
 | Matriz origen-destino estadística (prior de distancia) | más sábados acumulados | noviembre |
 | Clustering estacional (re-retrato de la ciudad) | otoño completo en la base | noviembre |
 | Forecast 2ª ronda: covariables (lluvia, hora, festivo) + más cuantiles | lo mismo que la lluvia | noviembre |
 | Auditoría real de la alarma (`risk_log.jsonl` vs base) | que la capa vuelva a correr unas semanas | tras el upgrade |
-| Reparto óptimo, etapa 3 (deriva descensurada con covariables) y etapa 4 (colocación + ruta) | un par de meses de datos y meteo variada; la etapa 2 ya está resuelta (no hay camión, §10) | noviembre en adelante |
+| Reparto óptimo, segunda vuelta: tasas condicionadas a meteo, simulación por réplica de días, tope de empeoramiento y capacidad del camión (`analysis/reparto.py`) | lluvia variada de otoño | noviembre en adelante |
