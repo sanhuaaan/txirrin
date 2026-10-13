@@ -84,3 +84,21 @@ Ruta orientativa (vecino más cercano, línea recta): 61 paradas, ~36.3 km, empe
 - **Siguiente vuelta** (con lluvia variada, hacia noviembre): tasas condicionadas
   a meteo, simulación por réplica de días reales en vez de tasas medias, tope de
   empeoramiento y capacidad del camión.
+
+## En la web (2026-10-13)
+
+El botón *Reparto* del timelapse ejecuta este mismo modelo en el navegador con la
+marea de `rates.json` (la VM la recalcula cada noche con `build_rates.py`, mismo
+método que arriba). Diferencias respecto a esta primera vuelta offline, todas
+nacidas de la observación de que el óptimo "puro" movía el 40 % de la flota:
+
+- **Hora elegible** (06-23 h) con ventana de 24 h (la noche cerrada no mueve
+  nada), y opción de partir del estado real de ahora en vez del stock típico.
+- **Precio por bici movida y por parada** (una parada cuesta como 3 bicis), con
+  un único multiplicador que la web busca por bisección para respetar dos topes:
+  bicis a mover y estaciones a visitar.
+- **Suelo de 1 bici** por estación (la marea media no ve los días malos) y
+  **ninguna parada por una sola bici** (mueve 0 o >=2).
+- **Curva de rendimientos decrecientes**, laborable 06:00 con datos reales:
+  22 bicis en 11 estaciones 24 → 18 %; 44 en 20, → 14 %; 165 en 64, → 6 %.
+  La mitad de la mejora máxima se compra con una ruta de 11 estaciones.

@@ -453,9 +453,12 @@ tiene su informe completo en `analysis/`.
   fiables; «llena» solo orientativa.
 - **Reparto óptimo en la web**: el mismo cron nocturno sube `rates.json` (marea por estación ×
   tipo de día × hora, corregida de censura y con conservación, más el stock típico); el botón
-  *Reparto* simula y optimiza en el navegador (DP exacta, <20 ms) para la hora y tipo de día
+  *Reparto* simula y optimiza en el navegador (DP exacta, <100 ms) para la hora y tipo de día
   elegidos —o partiendo del estado real de ahora— y pinta en el mapa dónde añadir y retirar bicis.
-  Método y caveats en `analysis/reparto.md`.
+  Mandos: tope de bicis a mover y de estaciones a visitar (un precio por bici y por parada,
+  buscado por bisección), suelo de 1 bici por estación, ninguna parada por una sola bici, y la
+  curva de rendimientos decrecientes (en laborable a las 06:00, 22 bicis en 11 estaciones compran
+  la mitad de la mejora máxima). Método y caveats en `analysis/reparto.md`.
 
 **Principio vigente**: en producción solo lo que quepa en la e2-micro gratuita.
 El portátil vale para análisis puntuales, no para servicios.
@@ -482,4 +485,4 @@ El portátil vale para análisis puntuales, no para servicios.
 | Clustering estacional (re-retrato de la ciudad) | otoño completo en la base | noviembre |
 | Forecast 2ª ronda: covariables (lluvia, hora, festivo) + más cuantiles | lo mismo que la lluvia | noviembre |
 | Auditoría real de la alarma (`risk_log.jsonl` vs base) | que la capa vuelva a correr unas semanas | tras el upgrade |
-| Reparto óptimo, segunda vuelta: tasas condicionadas a meteo, simulación por réplica de días, tope de empeoramiento y capacidad del camión (`analysis/reparto.py`) | lluvia variada de otoño | noviembre en adelante |
+| Reparto óptimo, segunda vuelta: tasas condicionadas a meteo, simulación por réplica de días reales (no tasas medias), tope de empeoramiento por estación y capacidad del camión por viaje (`analysis/reparto.py`, `rates.json`) | lluvia variada de otoño | noviembre en adelante |
