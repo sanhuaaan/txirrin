@@ -14,7 +14,7 @@ gcs() {
   if ! out=$(gcloud storage "$@" 2>&1); then printf '%s\n' "$out" >&2; return 1; fi
 }
 
-BUCKET=gs://cosas-con-datos-en-dbizi-backup
+BUCKET=${TXIRRIN_BUCKET_BACKUP:-gs://cosas-con-datos-en-dbizi-backup}   # en ~/.dbizi.env si es otro
 STAMP=$(date -u +%Y%m%d)
 
 sudo docker compose -f /opt/dbizi/docker-compose.yml exec -T postgres \

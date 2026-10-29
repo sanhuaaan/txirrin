@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 CTX, HSTEP = 384, 2            # 4 días de contexto, paso 2 = +30 min
-BUCKET = "gs://cosas-con-datos-en-dbizi-viz/risk.json"
+BUCKET = os.environ.get("TXIRRIN_BUCKET_VIZ", "gs://cosas-con-datos-en-dbizi-viz") + "/risk.json"
 GC = ["gcloud"]
 ENV = dict(os.environ, CLOUDSDK_ACTIVE_CONFIG_NAME="dbizi")
 

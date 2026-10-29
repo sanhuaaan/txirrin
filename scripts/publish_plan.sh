@@ -3,7 +3,7 @@
 # Ultimas 8 semanas, por estacion x tipo de dia (lab/sab/dom; festivos = dom) x hora.
 set -euo pipefail
 . ~/.dbizi.env
-BUCKET=gs://cosas-con-datos-en-dbizi-viz
+BUCKET=${TXIRRIN_BUCKET_VIZ:-gs://cosas-con-datos-en-dbizi-viz}   # en ~/.dbizi.env si es otro
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 Q() { sudo docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" dbizi-postgres-1 \
         psql -U dbizi -d dbizi -tAF, -c "$1"; }

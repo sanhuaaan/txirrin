@@ -1,0 +1,11 @@
+# crontab del usuario en la VM (instalar con: crontab deploy/crontab). Horas en UTC.
+# Colector a minutos pares; visualización a impares para no coincidir.
+*/2 * * * * ~/collect.sh >> ~/collect.log 2>&1
+2-59/5 * * * * ~/publish_viz.sh >> ~/viz.log 2>&1
+5 * * * * ~/raw_upload.sh >> ~/raw_upload.log 2>&1
+40 */3 * * * ~/openmeteo.sh >> ~/openmeteo.log 2>&1
+10 4 * * * ~/backup.sh >> ~/backup.log 2>&1
+40 4 * * * ~/publish_plan.sh >> ~/plan.log 2>&1
+45 4 2 * * ~/weather.sh >> ~/weather.log 2>&1
+20 5 * * * python3 ~/harvest_events.py >> ~/events.log 2>&1
+50 5,11,17,23 * * * ~/sports.sh >> ~/sports.log 2>&1

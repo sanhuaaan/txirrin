@@ -11,7 +11,7 @@ gcs() {
   local out
   if ! out=$(gcloud storage "$@" 2>&1); then printf '%s\n' "$out" >&2; return 1; fi
 }
-BUCKET=gs://cosas-con-datos-en-dbizi-backup
+BUCKET=${TXIRRIN_BUCKET_BACKUP:-gs://cosas-con-datos-en-dbizi-backup}   # en ~/.dbizi.env si es otro
 
 python3 ~/pack_raw.py > /dev/null
 for d in $(date -u -d yesterday +%Y%m%d) $(date -u +%Y%m%d); do

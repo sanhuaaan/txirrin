@@ -1,0 +1,18 @@
+# Postgres 16 + PostGIS 3.4 de la VM, tal cual corre en /opt/dbizi/.
+# La contraseña va en /opt/dbizi/.env (POSTGRES_PASSWORD=...), root y 600; no en el repo.
+# Puerto solo en localhost: la VM no expone nada.
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: always
+    environment:
+      POSTGRES_USER: dbizi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: dbizi
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    shm_size: 128mb
+volumes:
+  pgdata:

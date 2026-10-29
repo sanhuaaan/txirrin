@@ -494,3 +494,22 @@ El portátil vale para análisis puntuales, no para servicios.
 | Forecast 2ª ronda: covariables (lluvia, hora, festivo) + más cuantiles | lo mismo que la lluvia | noviembre |
 | Auditoría real de la alarma (`risk_log.jsonl` vs base) | que la capa vuelva a correr unas semanas | tras el upgrade |
 | Reparto óptimo, segunda vuelta: tasas condicionadas a meteo, simulación por réplica de días reales (no tasas medias), tope de empeoramiento por estación y capacidad del camión por viaje (`analysis/reparto.py`, `rates.json`) | lluvia variada de otoño | noviembre en adelante |
+
+---
+
+## Licencia y fuentes de datos
+
+El código es **MIT** (ver `LICENSE`). Los datos son de sus dueños y viajan con sus condiciones:
+
+- **Dbizi** (feed GBFS público, operado por PBSC para el Ayuntamiento de Donostia): la fuente
+  principal; las capturas y el dump son una copia del feed público.
+- **Open-Meteo** (CC BY 4.0) y **Euskalmet** (Open Data Euskadi): meteorología.
+- **Kulturklik** (Open Data Euskadi): agenda de eventos.
+- **OpenStreetMap** (© colaboradores de OSM, ODbL): ríos, viales, edificios y cobertura del
+  suelo incrustados en `viz/donostia-dem.json`, y los entornos de estaciones de los análisis.
+- **IGN / PNOA** (CC BY 4.0, scne.es): máscara de mar a partir de la ortofoto.
+- **EU-DEM** (Copernicus, vía OpenTopoData): relieve.
+- **openfootball** (dominio público) y realsociedad.eus: calendario de partidos.
+
+Montar una copia propia: `infraestructura.md`, sección *Montar tu propia copia (fork)*.
+

@@ -9,7 +9,7 @@ set -euo pipefail
 
 VENTANA_H=${VENTANA_H:-24}
 PUBLICAR_HTML=${PUBLICAR_HTML:-0}
-BUCKET=gs://cosas-con-datos-en-dbizi-viz
+BUCKET=${TXIRRIN_BUCKET_VIZ:-gs://cosas-con-datos-en-dbizi-viz}   # en ~/.dbizi.env si es otro
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 # gcloud escribe su narracion por STDERR, asi que ">/dev/null" no la calla y

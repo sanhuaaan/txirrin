@@ -1,6 +1,8 @@
 # Infraestructura
 
-Estado a 2026-08-21. Coste: **0 €/mes**.
+Estado a 2026-10-29 (montaje inicial del 2026-08-21). Coste: **0 €/mes**.
+
+¿Quieres tu propia copia? Ve a [Montar tu propia copia](#montar-tu-propia-copia-fork).
 
 ```text
   GBFS Dbizi        Euskalmet XML      Open-Meteo        Kulturklik
@@ -21,7 +23,7 @@ Estado a 2026-08-21. Coste: **0 €/mes**.
 └──────────────────────────────────────────┼────────────┼───┼─────────────────┘
                                            ▼            ▼   ▼
               gs://…-backup  (PRIVADO)        gs://…-viz  (PÚBLICO)
-              dumps/ 7 días                   index.html + data.json
+              dumps/ 7 días                   index.html + data.json + plan.json + rates.json
               raw/ y events/ para siempre      → la web viva del timelapse
 
   Vigilancia: collect.sh y backup.sh pingan a healthchecks.io al terminar bien.
@@ -41,7 +43,7 @@ Estado a 2026-08-21. Coste: **0 €/mes**.
 | Bucket | Acceso | Contiene | Caducidad |
 |--------|--------|----------|-----------|
 | `cosas-con-datos-en-dbizi-backup` | **privado** | `dumps/`, `raw/YYYYMMDD.tar.xz` (un objeto por día), `events/` | solo `dumps/`, 7 días |
-| `cosas-con-datos-en-dbizi-viz` | **público** | `index.html`, `data.json` | ninguna (se sobrescriben) |
+| `cosas-con-datos-en-dbizi-viz` | **público** | `index.html`, `data.json` (cada 5 min), `plan.json` y `rates.json` (cada noche) | ninguna (se sobrescriben) |
 
 Están separados **a propósito**: en GCS los permisos públicos son a nivel de bucket, así que publicar la web desde el de backups habría hecho públicos los dumps de la base de datos. La regla de caducidad va acotada con `matchesPrefix: ["dumps/"]` — sin ese acote se llevaría por delante el crudo, que es irrecuperable. Ninguno tiene versionado, así que sobrescribir `data.json` no acumula copias.
 
@@ -52,6 +54,7 @@ Están separados **a propósito**: en GCS los permisos públicos son a nivel de 
 | `collect.sh` | cada 2 min | GBFS → `dbizi_measurement` + crudo gzip a `~/raw/` (`station_information` 1×/día). Escribe de forma atómica y **archiva siempre**: si el feed no valida lo guarda como `.bad` y falla después, así un cambio de esquema en PBSC no abre un hueco irrecuperable | `~/collect.log` |
 | `raw_upload.sh` | cada hora (`:05`) | `pack_raw.py` empaqueta hoy y ayer en `~/raw/YYYYMMDD.tar.xz` (JSON descomprimido + xz nivel 1: 0,36 MB/día frente a 1,09 sueltos) y los sube a `raw/` (1 objeto/día, sobreescrito; 48 operaciones/día, dentro de la capa gratuita). Borra el crudo local de más de 30 días | `~/raw_upload.log` |
 | `publish_viz.sh` | cada 5 min (`:02`, `:07`…) | Regenera el JSON del timelapse (24 h) → bucket público | `~/viz.log` |
+| `publish_plan.sh` | 04:40 diario | Últimas 8 semanas → `plan.json` (riesgo por estación × tipo de día × hora, para el planificador de viajes; `build_plan.py`) y `rates.json` (marea corregida por estación × día de la semana × hora, perfiles de evento y stock típico, para el reparto óptimo; `build_rates.py`). La consulta de la marea tarda ~10 min en la e2-micro | `~/plan.log` |
 | `backup.sh` | 04:10 diario | `pg_dump -Fc` → `dumps/` + `~/events` → `events/` (el crudo ya no va aquí) | `~/backup.log` |
 | `weather.sh` | 04:45 del día 2 de cada mes | Euskalmet oficial, idempotente: **año anterior + actual** (suelo en 2026). Los meses ya cargados insertan 0; los no publicados dan 404 y se saltan | `~/weather.log` |
 | `harvest_events.py` | 05:20 diario | Kulturklik mes actual + siguiente → `~/events/events_YYYYMMDD.json.gz` | `~/events.log` |
@@ -94,7 +97,7 @@ Dos trampas del modelo, ambas documentadas en el propio `schema.sql`:
 `sql/schema.sql` es **re-ejecutable**: sus `ALTER ... IF NOT EXISTS` finales migran una BD ya poblada. Copiar y relanzar:
 
 ```bash
-gcloud compute scp sql/schema.sql scripts/*.py scripts/*.sh \
+gcloud compute scp sql/schema.sql sql/holidays.sql scripts/*.py scripts/*.sh \
   viz/donostia-barrios.json viz/donostia-dem.json viz/timelapse.tpl.html \
   dbizi-vm:~/ --zone=us-west1-a --configuration=dbizi
 gcloud compute scp data/eventos-populares.csv dbizi-vm:~/data/ --zone=us-west1-a --configuration=dbizi
@@ -136,6 +139,9 @@ Dead man's switch en [healthchecks.io](https://healthchecks.io) (plan gratuito):
 - **No cubre el feed congelado** de PBSC: `collect.py` termina bien aunque `last_updated` no avance. Para eso, el chequeo manual de abajo.
 
 ## Almacenamiento y crecimiento
+
+A 2026-10-29: 3,5 millones de filas en `dbizi_measurement` (71 días) y una base de 499 MB; la
+previsión de agosto (~3,2 GB al año) sigue en pie. La tabla de abajo es la foto del arranque.
 
 | Qué | Ahora | Al año | ¿Acumula? |
 |-----|-------|--------|-----------|
@@ -183,6 +189,33 @@ gcloud compute ssh dbizi-vm --zone=us-west1-a --configuration=dbizi -- -L 5432:l
 ```
 
 Credenciales BD: `/opt/dbizi/.env` (root, 600) y `~/.dbizi.env` (usuario, para cron). **No están en el repo.**
+
+## Montar tu propia copia (fork)
+
+Para quien quiera su propia captura. Todo cabe en la capa gratuita de GCP; nada de esto toca
+la instancia original.
+
+1. **Proyecto y VM.** Proyecto GCP propio con alerta de presupuesto. VM e2-micro en
+   `us-west1-a` (o `us-central1`/`us-east1`, las otras regiones gratuitas), Ubuntu 24.04, 30 GB
+   *standard*, scopes `devstorage.read_write` y `logging.write`. Si podéis permitiros algo más que
+   la capa gratuita, una máquina con 2-4 GB de RAM evita la mayoría de los ⚠️ de este documento
+   y deja correr la capa de riesgo (TimesFM), que en la e2-micro no cabe.
+2. **Buckets.** Dos, con nombres propios (los de GCS son globales): uno **público** para la web y
+   otro **privado** para dumps y crudo. Separados por lo que se explica en *Buckets*. En el
+   privado, regla de caducidad de 7 días acotada a `dumps/`.
+3. **Postgres.** Docker en la VM y `deploy/docker-compose.yml` en `/opt/dbizi/`, con
+   `/opt/dbizi/.env` (`POSTGRES_PASSWORD=...`, root y 600). `docker compose up -d`.
+4. **Variables.** `deploy/dbizi.env.example` → `~/.dbizi.env` (600), con la misma contraseña y
+   **tus** buckets en `TXIRRIN_BUCKET_VIZ` y `TXIRRIN_BUCKET_BACKUP` (los scripts usan los del
+   proyecto original si no las defines, y fallarán por permisos).
+5. **Código y esquema.** El bloque de *Despliegue*: copiar fuentes, lanzar `schema.sql` y
+   `holidays.sql`. Para partir con historia en vez de en vacío, restaurar el dump publicado en
+   las *releases* del repo con `pg_restore --data-only`.
+6. **Crons.** `crontab deploy/crontab`.
+7. **Web.** `PUBLICAR_HTML=1 ~/publish_viz.sh` una vez; la página queda en
+   `https://storage.googleapis.com/<tu-bucket-viz>/index.html`.
+8. **Opcional:** healthchecks.io (*Monitorización*) y la configuración gcloud con nombre propio
+   en el portátil, para no mezclar con otras cuentas.
 
 ## Riesgos asumidos
 
