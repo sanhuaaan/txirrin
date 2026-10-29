@@ -35,22 +35,28 @@ out=$(gcloud storage cp -q --gzip-local-all --cache-control="public, max-age=360
 # capturas) + fraccion vacia/llena + stock medio, por estacion, dia y hora.
 Q "WITH m AS (
      SELECT station_id, ts, (ts AT TIME ZONE 'Europe/Madrid') AS lt, bikes_available, docks_available,
+            coalesce(electric_available,0) AS el, coalesce(mechanical_available,0) AS mc,
             bikes_available - lag(bikes_available) OVER w AS df,
+            coalesce(electric_available,0) - lag(coalesce(electric_available,0)) OVER w AS de,
             coalesce(vehicles_disabled,0) - lag(coalesce(vehicles_disabled,0)) OVER w AS db,
             (is_installed AND lag(is_installed) OVER w) AS inst, ts - lag(ts) OVER w AS gap
      FROM dbizi_measurement WHERE ts >= now() - interval '56 days'
-     WINDOW w AS (PARTITION BY station_id ORDER BY ts))
-   SELECT m.station_id,
+     WINDOW w AS (PARTITION BY station_id ORDER BY ts)),
+   v AS (SELECT *, (df IS NOT NULL AND inst AND gap <= interval '5 min' AND abs(df) < 6) AS ok FROM m)
+   SELECT v.station_id,
           CASE WHEN h.date IS NOT NULL THEN 'fes'
-               ELSE (ARRAY['lun','mar','mie','jue','vie','sab','dom'])[extract(isodow FROM m.lt)] END,
-          extract(hour FROM m.lt)::int, m.lt::date,
-          sum(CASE WHEN df IS NOT NULL AND inst AND gap <= interval '5 min' AND abs(df) < 6
-                   THEN greatest(0, -df - greatest(0, db)) ELSE 0 END),
-          sum(CASE WHEN df IS NOT NULL AND inst AND gap <= interval '5 min' AND abs(df) < 6
-                   THEN greatest(0,  df - greatest(0,-db)) ELSE 0 END),
-          avg((bikes_available = 0)::int), avg((docks_available = 0)::int), avg(bikes_available)
-   FROM m LEFT JOIN holiday h ON h.date = m.lt::date
-   WHERE m.lt >= now() - interval '56 days'
+               ELSE (ARRAY['lun','mar','mie','jue','vie','sab','dom'])[extract(isodow FROM v.lt)] END,
+          extract(hour FROM v.lt)::int, v.lt::date,
+          sum(CASE WHEN ok THEN greatest(0, -df - greatest(0, db)) ELSE 0 END),
+          sum(CASE WHEN ok THEN greatest(0,  df - greatest(0,-db)) ELSE 0 END),
+          avg((bikes_available = 0)::int), avg((docks_available = 0)::int), avg(bikes_available),
+          -- por tipo: electricas, acotadas al total (una reclasificacion e->m no es un viaje);
+          -- sin descontar averiadas porque no sabemos de que tipo son
+          sum(CASE WHEN ok AND db = 0 THEN least(greatest(0,-de), greatest(0,-df)) ELSE 0 END),
+          sum(CASE WHEN ok AND db = 0 THEN least(greatest(0, de), greatest(0, df)) ELSE 0 END),
+          avg(el), avg((el = 0 AND mc > 0)::int)
+   FROM v LEFT JOIN holiday h ON h.date = v.lt::date
+   WHERE v.lt >= now() - interval '56 days'
    GROUP BY 1, 2, 3, 4 HAVING count(*) >= 10 ORDER BY 1, 2, 3, 4;" > "$TMP/rates.csv"
 Q "SELECT station_id, capacity, ST_Y(geom), ST_X(geom) FROM dbizi_station WHERE capacity IS NOT NULL;" > "$TMP/cap.csv"
 # eventos con sitio (partidos, regatas, carreras): sus horas salen de la media y dan el perfil

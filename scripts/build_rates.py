@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Genera rates.json: la marea de cada estación para el reparto en el navegador.
 
-Entrada: CSV station_id,wd,hour,day,dep,arr,p_empty,p_full,stock (publish_plan.sh;
-         wd = lun…dom o fes para los festivos)
+Entrada: CSV station_id,wd,hour,day,dep,arr,p_empty,p_full,stock,dep_e,arr_e,stock_e,p_noelec
+         (publish_plan.sh; wd = lun…dom o fes para los festivos; *_e = eléctricas)
          + CSV station_id,capacity,lat,lon
          + CSV id,kind,starts_at,ends_at,lat,lon de los eventos de la ventana (tabla event).
 Salida: por día de la semana y estación, 18 horas (6-23) de tasa de salidas y de
@@ -75,11 +75,13 @@ for ev in events:
         excluded[sid] |= ev["hours"]
 
 # filas crudas por (sid, wd, h): limpias para las medias, todas para el perfil
-acc = defaultdict(lambda: {"dep": [], "arr": [], "dep_all": [], "arr_all": [], "stock": [], "days": set()})
+acc = defaultdict(lambda: {"dep": [], "arr": [], "dep_all": [], "arr_all": [], "stock": [], "days": set(),
+                           "dep_e": [], "arr_e": [], "dep_e_all": [], "arr_e_all": [], "stock_e": []})
 raw = {}                                          # (sid, day, hour) -> (dep, arr) sin corregir
 n_excl = 0
-for sid, wd, h, day, dep, arr, pe, pf, stock in csv.reader(open(src)):
+for sid, wd, h, day, dep, arr, pe, pf, stock, dep_e, arr_e, stock_e, pne in csv.reader(open(src)):
     h, dep, arr, pe, pf = int(h), float(dep), float(arr), float(pe), float(pf)
+    dep_e, arr_e, pne = float(dep_e), float(arr_e), float(pne)
     if not H0 <= h < H1: continue
     raw[(sid, day, h)] = (dep, arr, wd)
     if (day, h) in excluded.get(sid, ()): n_excl += 1; continue
@@ -88,33 +90,45 @@ for sid, wd, h, day, dep, arr, pe, pf, stock in csv.reader(open(src)):
         a["dep_all"].append(dep); a["arr_all"].append(arr); a["stock"].append(float(stock)); a["days"].add(day)
         if pe < CENSOR: a["dep"].append(dep / (1 - pe))
         if pf < CENSOR: a["arr"].append(arr / (1 - pf))
+        # eléctricas: la censura es "sin eléctricas" (con o sin mecánicas), no "vacía"
+        a["dep_e_all"].append(dep_e); a["arr_e_all"].append(arr_e); a["stock_e"].append(float(stock_e))
+        if pne + pe < CENSOR: a["dep_e"].append(dep_e / (1 - pne - pe))
+        if pf < CENSOR: a["arr_e"].append(arr_e / (1 - pf))
 mean = lambda v: sum(v) / len(v) if v else 0.0
 def tasa(a, k):
     return mean(a[k]) if a[k] else mean(a[k + "_all"])
 
 rates = {}
-blank = lambda: {"dep": [0.0] * (H1 - H0), "arr": [0.0] * (H1 - H0), "stock": [0.0] * (H1 - H0), "days": 0, "wdays": 0}
+blank = lambda: {k: [0.0] * (H1 - H0) for k in ("dep", "arr", "stock", "dep_e", "arr_e", "stock_e")} | {"days": 0, "wdays": 0}
 for (sid, key, h), a in acc.items():
     if key in TIPO:                               # día de la semana: encoger hacia la base de su tipo
         b = acc.get((sid, TIPO[key], h)); n = len(a["days"])
         if b is None: continue
         r = rates.setdefault(key, {}).setdefault(sid, blank())
-        for k in ("dep", "arr"):
+        for k in ("dep", "arr", "dep_e", "arr_e"):
             r[k][h - H0] = (n * tasa(a, k) + K * tasa(b, k)) / (n + K)
-        r["stock"][h - H0] = (n * mean(a["stock"]) + K * mean(b["stock"])) / (n + K)
+        for k in ("stock", "stock_e"):
+            r[k][h - H0] = (n * mean(a[k]) + K * mean(b[k])) / (n + K)
         r["days"] = max(r["days"], len(b["days"]))   # lo que sostiene la casilla es la base
         r["wdays"] = max(r["wdays"], n)
     else:                                         # base por tipo de día, como antes
         r = rates.setdefault(key, {}).setdefault(sid, blank())
-        r["dep"][h - H0] = tasa(a, "dep"); r["arr"][h - H0] = tasa(a, "arr")
-        r["stock"][h - H0] = mean(a["stock"]); r["days"] = r["wdays"] = max(r["days"], len(a["days"]))
+        for k in ("dep", "arr", "dep_e", "arr_e"): r[k][h - H0] = tasa(a, k)
+        for k in ("stock", "stock_e"): r[k][h - H0] = mean(a[k])
+        r["days"] = r["wdays"] = max(r["days"], len(a["days"]))
 for dt, sts in rates.items():                     # conservación por hora: salidas == llegadas
     for i in range(H1 - H0):
         sd, sa = sum(r["dep"][i] for r in sts.values()), sum(r["arr"][i] for r in sts.values())
         k = sd / sa if sa > 0 else 1.0
         for r in sts.values(): r["arr"][i] *= k
+        # y por tipo: las llegadas eléctricas cuadran con las salidas eléctricas, sin pasar del total
+        sde, sae = sum(r["dep_e"][i] for r in sts.values()), sum(r["arr_e"][i] for r in sts.values())
+        ke = sde / sae if sae > 0 else 1.0
+        for r in sts.values():
+            r["dep_e"][i] = min(r["dep_e"][i], r["dep"][i]); r["arr_e"][i] = min(r["arr_e"][i] * ke, r["arr"][i])
+            r["stock_e"][i] = min(r["stock_e"][i], r["stock"][i])
     for r in sts.values():
-        for key in ("dep", "arr", "stock"): r[key] = [round(v, 2) for v in r[key]]
+        for key in ("dep", "arr", "stock", "dep_e", "arr_e", "stock_e"): r[key] = [round(v, 2) for v in r[key]]
 
 # perfil de evento: exceso por estación y hora sobre la base de su tipo de día, por anillo
 prof = {}

@@ -251,6 +251,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
     <label>Mover como máximo <span class="hv" id="rep-mv">40 bicis</span><input type="range" id="rep-max" min="0" max="200" step="5" value="40"></label>
     <label>Estaciones a visitar como máximo <span class="hv" id="rep-sv">12</span><input type="range" id="rep-stops" min="1" max="70" step="1" value="12"></label>
     <label class="chk"><input type="checkbox" id="rep-live"> Partir del estado real de ahora mismo</label>
+    <label class="chk"><input type="checkbox" id="rep-typed"> Por tipo: eléctricas y mecánicas por separado (objetivo: viajes perdidos)</label>
   </form>
   <div id="rep-out" aria-live="polite"></div>
   <button id="rep-apply" type="button">Ver en el mapa</button>
@@ -965,12 +966,14 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       ctx.fillStyle = full === "closed" ? "#f0d47a" : full ? "#9cc6ff" : "#ffb3b3"; ctx.fillText(txt, X, Y);
     }
 
-    for (const [s, h, m] of repLabels) {         // reparto: disco verde (añadir) o rojo (retirar) con la cifra
-      const c = iso(s.x, s.y, s.z + h + 16), r = 7 + Math.min(8, Math.abs(m));
+    for (const [s, h, mv] of repLabels) {        // reparto: disco verde (añadir) o rojo (retirar) con la cifra
+      const typed = typeof mv === "object", m = typed ? mv.e + mv.m : mv;
+      const txt = typed ? [mv.e ? (mv.e > 0 ? "+" : "") + mv.e + "e" : "", mv.m ? (mv.m > 0 ? "+" : "") + mv.m + "m" : ""].filter(Boolean).join(" ") : (m > 0 ? "+" : "") + m;
+      const c = iso(s.x, s.y, s.z + h + 16), r = 7 + Math.min(8, Math.abs(m)) + (typed ? 6 : 0);
       ctx.beginPath(); ctx.arc(sx(c), sy(c), r, 0, 6.284);
-      ctx.fillStyle = m > 0 ? "rgba(95,184,122,.85)" : "rgba(230,103,103,.85)"; ctx.fill();
-      ctx.font = '600 10px "IBM Plex Mono", monospace'; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "#0c1116"; ctx.fillText((m > 0 ? "+" : "") + m, sx(c), sy(c));
+      ctx.fillStyle = m >= 0 ? "rgba(95,184,122,.85)" : "rgba(230,103,103,.85)"; ctx.fill();
+      ctx.font = `600 ${typed ? 8 : 10}px "IBM Plex Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#0c1116"; ctx.fillText(txt, sx(c), sy(c));
     }
     compass();
     el.speed.textContent = HOURS + " h · " + NF + " frames" +
@@ -1420,7 +1423,85 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     const stops = rows.reduce((a, r) => a + (r.opt !== r.now ? 1 : 0), 0);
     return { rows, B, costNow, costOpt, moved, stops, evs };
   }
+  // --- por tipo: eléctricas y mecánicas por separado, capacidad compartida ---
+  // Un tercio de la flota es eléctrica y hace dos tercios de los viajes (analysis/
+  // electric.md): faltan en el llano mientras las bicis en general faltan en la
+  // cuesta. Objetivo aquí: viajes perdidos (quien quiere eléctrica y no la hay,
+  // con sustitución parcial a mecánica; quien no encuentra bici; quien no puede
+  // anclar). Se optimiza alternando: eléctricas con las mecánicas fijas, luego
+  // mecánicas con las eléctricas fijas, dos vueltas. Cada pasada es la misma DP.
+  const SUB = 0.5;                                 // quien no encuentra eléctrica y se lleva mecánica
+  function repSimTyped(r, order, e0, m0) {         // viajes perdidos en las 24 h y fracción fuera de banda
+    let e = e0, m = m0, lost = 0, oob = 0;
+    for (const i of order) for (let k = 0; k < STEPS_H; k++) {
+      const we = r.depE[i] / STEPS_H, wm = (r.dep[i] - r.depE[i]) / STEPS_H;
+      const se = Math.min(e, we), ue = we - se;
+      const wm2 = wm + SUB * ue, sm = Math.min(m, wm2), um = wm2 - sm;
+      e -= se; m -= sm;
+      const ae = r.arrE[i] / STEPS_H, am = (r.arr[i] - r.arrE[i]) / STEPS_H, room = Math.max(0, r.cap - e - m);
+      const inn = ae + am, f = inn > room ? room / inn : 1;
+      e += ae * f; m += am * f;
+      lost += ue * (1 - SUB) + um + inn * (1 - f);
+      if (e + m <= 0.5 || e + m >= r.cap - 0.5) oob++;
+    }
+    return { lost, oob: oob / (order.length * STEPS_H) };
+  }
+  function repPlanTyped(dt, H, live, lam = 0) {
+    const h0 = RATES.h0, nh = 24 - h0, order = [];
+    for (let i = H - h0; i < nh; i++) order.push(i);
+    for (let i = 0; i < H - h0; i++) order.push(i);
+    const rows = [];
+    for (let i = 0; i < N; i++) {
+      const r = RATES.rates[dt] && RATES.rates[dt][S[i].id], cap = RATES.cap[S[i].id];
+      if (!r || r.days < 5 || !cap || !r.depE) continue;
+      const fe = live && F[NF - 1].e ? F[NF - 1].e[i] : r.stock_e[H - h0];
+      const ft = live ? F[NF - 1].b[i] : r.stock[H - h0];
+      const nowE = Math.max(0, Math.min(cap, Math.round(fe))), nowM = Math.max(0, Math.min(cap - nowE, Math.round(ft - fe)));
+      rows.push({ i, id: S[i].id, cap, nowE, nowM, dep: r.dep, arr: r.arr, depE: r.depE, arrE: r.arrE });
+    }
+    const sE = rows.map(r => r.nowE), sM = rows.map(r => r.nowM);
+    const dp = (which) => {                        // which: "E" o "M"; el otro tipo queda fijo
+      const cur = which === "E" ? sE : sM, oth = which === "E" ? sM : sE;
+      const nowOf = (r) => which === "E" ? r.nowE : r.nowM, othNow = (r) => which === "E" ? r.nowM : r.nowE;
+      const B = rows.reduce((a, r) => a + nowOf(r), 0);
+      const costs = rows.map((r, j) => {
+        const lim = r.cap - oth[j], c = new Float64Array(lim + 1), nw = nowOf(r), stopPaid = oth[j] !== othNow(r);
+        for (let k = 0; k <= lim; k++) {
+          c[k] = (which === "E" ? repSimTyped(r, order, k, oth[j]) : repSimTyped(r, order, oth[j], k)).lost
+               + lam * (Math.abs(k - nw) + (k !== nw && !stopPaid ? STOP_BIKES : 0));
+          if (Math.abs(k - nw) === 1) c[k] += 1e6;
+        }
+        if (oth[j] === 0 && r.cap > 1) c[0] += 10;   // nunca una estación a cero bicis
+        return c;
+      });
+      let best = new Float64Array(B + 1).fill(1e9); best[0] = 0; const choice = [];
+      for (const c of costs) {
+        const nb = new Float64Array(B + 1).fill(1e9), arg = new Uint8Array(B + 1);
+        for (let b = 0; b <= B; b++) for (let k = 0; k < c.length && k <= b; k++) { const v = best[b - k] + c[k]; if (v < nb[b]) { nb[b] = v; arg[b] = k; } }
+        best = nb; choice.push(arg);
+      }
+      let b = B; for (let j = rows.length - 1; j >= 0; j--) { cur[j] = choice[j][b]; b -= cur[j]; }
+    };
+    for (let it = 0; it < 2; it++) { dp("E"); dp("M"); }
+    let lostNow = 0, lostOpt = 0, oobNow = 0, oobOpt = 0, moved = 0, stops = 0;
+    rows.forEach((r, j) => {
+      const a = repSimTyped(r, order, r.nowE, r.nowM), b = repSimTyped(r, order, sE[j], sM[j]);
+      lostNow += a.lost; lostOpt += b.lost; oobNow += a.oob; oobOpt += b.oob;
+      r.optE = sE[j]; r.optM = sM[j]; r.mE = sE[j] - r.nowE; r.mM = sM[j] - r.nowM;
+      r.now = r.nowE + r.nowM; r.opt = r.optE + r.optM;
+      moved += Math.max(0, r.mE) + Math.max(0, r.mM); if (r.mE || r.mM) stops++;
+    });
+    return { rows, typed: true, lostNow, lostOpt, costNow: oobNow / rows.length, costOpt: oobOpt / rows.length, moved, stops, evs: [] };
+  }
   function repPlanMax(dt, H, live, maxMoved, maxStops) {   // el precio que respeta ambos topes, por bisección
+    if ($p("rep-typed").checked) {
+      const ok = (q) => q.moved <= maxMoved && q.stops <= maxStops;
+      let p = repPlanTyped(dt, H, live, 0);
+      if (ok(p)) return p;
+      let lo = 0, hi = 20, best = null;
+      for (let it = 0; it < 12; it++) { const lam = (lo + hi) / 2, q = repPlanTyped(dt, H, live, lam); if (ok(q)) { best = q; hi = lam; } else lo = lam; }
+      return best || repPlanTyped(dt, H, live, 20);
+    }
     const ok = (q) => q.moved <= maxMoved && q.stops <= maxStops;
     let p = repPlan(dt, H, live, 0);
     if (ok(p)) return p;
@@ -1438,18 +1519,23 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
     $p("rep-hv").textContent = pad(H) + ":00"; $p("rep-mv").textContent = mx + " bicis"; $p("rep-sv").textContent = ms;
     const plan = repPlanMax(dt, H, live, mx, ms);
     // rendimientos decrecientes: cuánto compra cada tramo de bicis movidas (con el tope de paradas)
-    const curva = [10, 20, 40, 80, 160].map(n => { const q = repPlanMax(dt, H, live, n, ms); return `${q.moved} bicis en ${q.stops} estaciones → ${(q.costOpt * 100).toFixed(0)} %`; });
-    const mv = plan.rows.map(r => ({ ...r, m: r.opt - r.now })).filter(r => r.m !== 0).sort((a, c) => a.m - c.m);
+    const curva = plan.typed ? [] : [10, 20, 40, 80, 160].map(n => { const q = repPlanMax(dt, H, live, n, ms); return `${q.moved} bicis en ${q.stops} estaciones → ${(q.costOpt * 100).toFixed(0)} %`; });
+    const sg = (v) => (v > 0 ? "+" : "") + v;
+    const mv = plan.typed
+      ? plan.rows.filter(r => r.mE || r.mM).map(r => ({ ...r, m: r.mE + r.mM, txt: [r.mE ? sg(r.mE) + "e" : "", r.mM ? sg(r.mM) + "m" : ""].filter(Boolean).join(" ") })).sort((a, c) => a.m - c.m)
+      : plan.rows.map(r => ({ ...r, m: r.opt - r.now })).filter(r => r.m !== 0).sort((a, c) => a.m - c.m);
     const moved = plan.moved;
-    REP = new Map(mv.filter(r => Math.abs(r.m) >= 1).map(r => [r.id, r.m]));
+    REP = new Map(mv.map(r => [r.id, plan.typed ? { e: r.mE, m: r.mM } : r.m]));
     $p("rep-out").innerHTML =
       `<div class="kpi"><div><b>${moved}</b><span>bicis a mover</span></div>` +
       `<div><b>${plan.stops}</b><span>estaciones a visitar</span></div>` +
+      (plan.typed ? `<div><b>${Math.round(plan.lostNow)} → ${Math.round(plan.lostOpt)}</b><span>viajes perdidos al día (simulado)</span></div>` : "") +
       `<div><b>${(plan.costNow * 100).toFixed(0)} % → ${(plan.costOpt * 100).toFixed(0)} %</b><span>tiempo fuera de banda (simulado)</span></div></div>` +
-      `<div class="alt" style="padding:0 0 .4rem">Hoy ${(plan.costNow * 100).toFixed(0)} % · moviendo ${curva.join(" · ")}</div>` +
+      (plan.typed ? `<div class="alt" style="padding:0 0 .4rem">Eléctricas y mecánicas por separado; la mitad de quien no encuentra eléctrica se lleva una mecánica. Lista: e = eléctricas, m = mecánicas.</div>`
+                  : `<div class="alt" style="padding:0 0 .4rem">Hoy ${(plan.costNow * 100).toFixed(0)} % · moviendo ${curva.join(" · ")}</div>`) +
       plan.evs.filter(x => x.arr || x.dep).map(x => `<div class="alt" style="padding:0 0 .4rem">Hoy, ${x.e.name} a las ${x.e.h}: la marea de las estaciones a menos de ${x.p.rings[1] / 1000} km lleva ${(x.arr >= 0 ? "+" : "") + Math.round(x.arr)} llegadas y ${(x.dep >= 0 ? "+" : "") + Math.round(x.dep)} salidas de aquí al final de la ventana (medido en ${x.p.n} ${x.p.n === 1 ? "evento anterior" : "eventos anteriores"}).</div>`).join("") +
       "<ul>" + mv.map(r =>
-        `<li class="${r.m > 0 ? "add" : "rm"}">${r.m > 0 ? "+" : ""}${r.m} ${nombre(S[r.i])} <small>(${r.now}→${r.opt})</small></li>`).join("") + "</ul>";
+        `<li class="${r.m >= 0 ? "add" : "rm"}">${plan.typed ? r.txt : sg(r.m)} ${nombre(S[r.i])} <small>(${plan.typed ? `${r.nowE}e+${r.nowM}m→${r.optE}e+${r.optM}m` : `${r.now}→${r.opt}`})</small></li>`).join("") + "</ul>";
   }
   async function repOpen() {
     setPlaying(false);
@@ -1462,6 +1548,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       $p("rep-out").textContent = "Cargando la marea…";
       try { const r = await fetch("rates.json?t=" + Date.now(), { cache: "no-store" }); RATES = await r.json(); }
       catch (err) { $p("rep-out").textContent = "No se pudo cargar la marea."; return; }
+      for (const sts of Object.values(RATES.rates)) for (const r of Object.values(sts)) if (r.dep_e) { r.depE = r.dep_e; r.arrE = r.arr_e; }
+      $p("rep-typed").parentElement.hidden = !repTypedAvail();
     }
     repRender();
   }
@@ -1480,12 +1568,14 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   $p("rep-close").addEventListener("click", () => repDlg.close());
   repDlg.addEventListener("click", (ev) => { if (ev.target === repDlg) repDlg.close(); });
   $p("rep-form").addEventListener("input", (ev) => { if (ev.target.id === "rep-live") ev.target.dataset.touched = 1; repSync(); repRender(); });
+  // sin tasas por tipo en el json (noche anterior al cambio), el interruptor no sale
+  const repTypedAvail = () => RATES && Object.values(RATES.rates.lab || {}).some(r => r.dep_e);
   $p("rep-form").addEventListener("submit", (ev) => ev.preventDefault());
   $p("rep-apply").addEventListener("click", () => {
     repDlg.close();
     el2.repRow.hidden = !REP || !REP.size;
     $p("rep-clear").hidden = el2.repRow.hidden;
-    if (REP) el2.rep.textContent = [...REP.values()].filter(v => v > 0).reduce((a, v) => a + v, 0) + " bicis";
+    if (REP) el2.rep.textContent = [...REP.values()].reduce((a, v) => a + (typeof v === "object" ? Math.max(0, v.e) + Math.max(0, v.m) : Math.max(0, v)), 0) + " bicis";
     draw();
   });
   function repClear() { REP = null; el2.repRow.hidden = true; $p("rep-clear").hidden = true; draw(); }
