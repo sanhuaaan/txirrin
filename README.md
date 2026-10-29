@@ -441,6 +441,7 @@ tiene su informe completo en `analysis/`.
 | 2026-10-13 | **Reparto óptimo, primera vuelta** (etapas 1, 3 sin meteo, 4) | La red está el 15 % del tiempo fuera de banda, casi todo vacío y cuesta arriba; mover ~160 bicis del llano a la periferia a las 06:00 lo bajaría a ~6 % (simulado, optimista) | `reparto.md` |
 | 2026-10-13 | ¿Cuánto mueve un partido en Anoeta? | +44 llegadas en las 2 h previas y +54 salidas tras el final en las 5 estaciones a <800 m (×2 y ×4 sobre la base); el efecto llega a 1,6 km. Regatas y baloncesto, mucho menos | `partidos.md` |
 | 2026-10-14 | ¿Se usan más las eléctricas? | Un tercio de la flota, dos tercios de los viajes; con ambas a mano la eléctrica sale ×10 por bici; 27 % del horario sin eléctricas (llano); hasta ~1.000 salidas/día de demanda eléctrica no atendida (cota superior) | `electric.md` |
+| 2026-10-29 | ¿Compensa repartir eléctricas y mecánicas por separado? | No: ~3.300 salidas eléctricas de demanda al día para ~145 eléctricas; recolocarlas mejora un 3 %. El cuello de botella es el tamaño de la flota eléctrica; modo por tipo retirado | `electric.md` |
 | 2026-10-13 | ¿Qué palanca rinde más contra las estaciones vacías? (simulador "Un día con reparto", `viz/reparto_dia.tpl.html`) | Una ronda matutina no arregla el día; rondas programadas antes de las subidas de vacías ganan a las fijas; cerrar a cero cuesta ~160 bicis/día en 4 rondas; +100 bicis de flota ≈ 3 rondas diarias; los anclajes solos no sirven | `reparto.md` |
 
 ### Corriendo solo (todo dentro de la VM gratuita)

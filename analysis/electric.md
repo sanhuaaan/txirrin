@@ -60,3 +60,24 @@ Las que más tiempo pasan sin eléctricas:
   varias mecánicas en viajes; y el reparto de eléctricas hacia el llano (donde
   se agotan) es un criterio tan importante como el de bicis totales hacia la
   cuesta.
+
+## ¿Y si el camión repartiera eléctricas y mecánicas por separado? (2026-10-29)
+
+Se probó un reparto óptimo por tipo (tasas nocturnas por tipo en `rates.json`,
+simulación con eléctricas y mecánicas separadas, sustitución de la mitad de quien
+no encuentra eléctrica, objetivo: viajes perdidos). Con la demanda bien estimada
+(eléctrica = salidas totales − demanda mecánica propia, 74 % del total), el
+resultado en un laborable a las 06:00:
+
+- 30 bicis en 12 estaciones: viajes perdidos 1.133 → 1.094 (−3 %).
+- 100 bicis en 24 estaciones: 1.133 → 1.080, y el tiempo con estaciones vacías
+  empeora (26 % → 29 %), porque prefiere llevar eléctricas al llano que bicis a
+  la cuesta.
+
+**Conclusión: el cuello de botella eléctrico es el tamaño de la flota, no dónde
+está.** Hay unas 3.300 salidas eléctricas de demanda al día para ~145
+eléctricas; recolocarlas apenas cambia nada. El modo por tipo se retiró de la web
+y del cálculo nocturno (commit 6714648, revertido después); el reparto web sigue
+por bicis totales, que sí da mejoras claras. Primer intento descartado por otro
+motivo: corregir la censura de las eléctricas sin descontar a los sustitutos de
+las mecánicas inflaba la demanda eléctrica hasta el 95 %.
