@@ -1510,7 +1510,10 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
   }
   function tick(now) {
     if (!playing) return;
-    const dt = now - last; last = now;
+    // La marca de rAF es la del inicio del fotograma y puede ser ANTERIOR al
+    // performance.now() tomado al pulsar: dt negativo, pos < 0 y el día se
+    // daba por terminado en el primer fotograma. El tiempo no va hacia atrás.
+    const dt = Math.max(0, now - last); last = now;
     if (storyQ && now < holdUntil) {             // parada narrada: el tiempo espera al rótulo
       draw(); requestAnimationFrame(tick); return;
     }
@@ -1525,7 +1528,8 @@ const DEM        = __DEM__;       // relieve: rejilla de alturas (scripts/fetch_
       storyRings = new Set(b.s);
       holdUntil = now + 5200;
     }
-    if (pos >= NF - 1 || !(pos >= 0)) { endStory(); pos = NF - 1; setPlaying(false); draw(); return; }
+    if (!(pos >= 0)) pos = 0;                   // NaN o negativo: al principio, no al final
+    if (pos >= NF - 1) { endStory(); pos = NF - 1; setPlaying(false); draw(); return; }
     draw();
     requestAnimationFrame(tick);
   }
