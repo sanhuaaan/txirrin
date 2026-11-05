@@ -207,6 +207,8 @@ def main():
                     help="escribe solo el JSON de datos, sin HTML (para la web viva)")
     ap.add_argument("--src", default="",
                     help="si se indica, el HTML NO lleva los datos dentro: los pide a esta ruta")
+    ap.add_argument("--aviso", default="",
+                    help="HTML de un aviso fijo arriba de la página (vacío = ninguno); p. ej. proyecto pausado")
     ap.add_argument("--refresh", type=int, default=0,
                     help="segundos entre refrescos cuando se usa --src (0 = ninguno)")
     ap.add_argument("--weather", help="CSV ts,temp,mm,viento (horario) de la ventana; opcional")
@@ -240,7 +242,7 @@ def main():
         return
 
     tpl = open(a.tpl, encoding="utf-8").read()
-    for marca in ("__DATA__", "__SRC__", "__REFRESH__", "__DEM__"):
+    for marca in ("__DATA__", "__SRC__", "__REFRESH__", "__DEM__", "__AVISO__"):
         if marca not in tpl:
             sys.exit(f"la plantilla no tiene el marcador {marca}")
     # el relieve es estático: se embebe en la página, así el JSON vivo sigue
@@ -249,7 +251,8 @@ def main():
     html = (tpl.replace("__DATA__", "null" if a.src else blob)
                .replace("__SRC__", a.src)
                .replace("__REFRESH__", str(a.refresh * 1000))
-               .replace("__DEM__", dem))
+               .replace("__DEM__", dem)
+               .replace("__AVISO__", a.aviso))
     if os.path.dirname(a.out):
         os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:

@@ -1,5 +1,15 @@
 # Txirrin — Donostia Bike Intelligence
 
+> **Proyecto pausado el 5 de noviembre de 2026.** La captura se detuvo ese día (la VM se quedó sin
+> memoria tras 76 días; se aprovechó para cerrar). Todo lo capturado, 20-ago → 5-nov-2026, está en la
+> [release `data-2026-11-05`](https://github.com/sanhuaaan/txirrin/releases/tag/data-2026-11-05):
+> dump de la base, el crudo día a día (fuente de verdad) y las cosechas de eventos. La
+> [web](https://storage.googleapis.com/cosas-con-datos-en-dbizi-viz/index.html) sigue publicada,
+> congelada en su último día. La VM está parada, con su disco, y los buckets intactos.
+> **Reanudar**: arrancar la VM, `crontab deploy/crontab`, `ingest_raw.py` para el hueco; o desde cero,
+> `infraestructura.md` → *Montar tu propia copia* con los datos de la release.
+
+
 ## 1. Idea del proyecto
 
 Proyecto personal de **ingeniería y análisis de datos centrado en la red de bicicletas públicas Dbizi de Donostia-San Sebastián**.

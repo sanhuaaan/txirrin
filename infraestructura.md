@@ -1,5 +1,11 @@
 # Infraestructura
 
+**Pausado el 2026-11-05.** VM parada (disco conservado), crones sin ejecutar, healthchecks en pausa,
+web congelada con aviso, datos en la release `data-2026-11-05` y copia en `final/` del bucket privado
+(`dumps/` caduca a los 7 días; `final/` y `raw/` no). Causa de la parada: OOM tras 76 días (el kernel
+mató a `unattended-upgrades` dos veces y luego a Postgres; sin swap). Si se reanuda: añadir 1 GB de
+swap y acotar `unattended-upgrades` antes de volver a dejarla sola.
+
 Estado a 2026-10-29 (montaje inicial del 2026-08-21). Coste: **0 €/mes**.
 
 ¿Quieres tu propia copia? Ve a [Montar tu propia copia](#montar-tu-propia-copia-fork).

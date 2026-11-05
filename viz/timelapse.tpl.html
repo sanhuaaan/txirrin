@@ -120,6 +120,13 @@ button#ev .n{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:
 @keyframes blip{0%,100%{opacity:1}50%{opacity:.28}}
 @media (prefers-reduced-motion:reduce){ .pulse{animation:none} }
 
+/* ---- aviso fijo (vacío = no se muestra); lo rellena build_timelapse.py --aviso ---- */
+#aviso{position:fixed; left:0; right:0; top:0; z-index:60; background:#2a2410; color:#f0d47a;
+       font-size:12px; text-align:center; padding:6px 12px; border-bottom:1px solid #5a4d1a}
+#aviso a{color:#f0d47a}
+#aviso:empty{display:none}
+#aviso:not(:empty) ~ #head, #aviso:not(:empty) ~ #stats{margin-top:28px}
+
 /* ---- leyenda ---- */
 #legend{left:var(--space); bottom:calc(var(--space) + 110px); max-width:270px}
 .lgd-title{font-size:11px; color:var(--ink-2); letter-spacing:.06em; text-transform:uppercase; margin-bottom:8px}
@@ -179,6 +186,7 @@ button:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
 
 <div id="stage"><canvas id="c"></canvas></div>
 
+<div id="aviso">__AVISO__</div>
 <div class="overlay" id="head">
   <div>
     <h1>Txirrin <em>· Donostia en bici</em></h1>
