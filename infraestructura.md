@@ -1,10 +1,26 @@
 # Infraestructura
 
-**Pausado el 2026-11-05.** VM parada (disco conservado), crones sin ejecutar, healthchecks en pausa,
-web congelada con aviso, datos en la release `data-2026-11-05` y copia en `final/` del bucket privado
-(`dumps/` caduca a los 7 días; `final/` y `raw/` no). Causa de la parada: OOM tras 76 días (el kernel
-mató a `unattended-upgrades` dos veces y luego a Postgres; sin swap). Si se reanuda: añadir 1 GB de
-swap y acotar `unattended-upgrades` antes de volver a dejarla sola.
+**Pausado el 2026-11-05.** Causa: la VM se quedó sin memoria tras 76 días (el kernel mató dos
+veces a `unattended-upgrades`, 140 MB cada uno, y luego a Postgres; 1 GB de RAM y sin swap) y se
+aprovechó para parar. Cómo quedó todo:
+
+| qué | estado | dónde |
+|---|---|---|
+| VM `dbizi-vm` | **parada** (`TERMINATED`), disco de 30 GB conservado, sin IP estática: coste 0 | GCP `cosas-con-datos-en-dbizi`, `us-west1-a` |
+| Base de datos | último dump de las 04:10 UTC del 5-nov (36 MB); lo posterior hasta las 08:05 está en el crudo | `gs://…-backup/final/dbizi_20261105.dump` (el bucket **no** tiene ya regla de caducidad: `dumps/` tampoco se borra), release `data-2026-11-05`, `~/txirrin-datos/` en el PC |
+| Crudo (fuente de verdad) | 77 tars diarios, 21-ago → 5-nov 08:05 UTC | `gs://…-backup/raw/`, release, PC |
+| Eventos (Kulturklik) | 75 cosechas | `gs://…-backup/events/`, release, PC |
+| Crones | no corren (VM parada); `deploy/crontab` guarda el horario | — |
+| healthchecks.io | los dos checks en pausa | — |
+| Capa de riesgo (TimesFM, portátil) | nunca estuvo en producción (parada desde el 1-oct) | — |
+| Web | publicada, congelada en el último día, con aviso fijo (`build_timelapse.py --aviso`) | bucket `-viz`, `index.html` + `data.json`, `plan.json`, `rates.json` |
+| Repo | etiqueta `cierre-2026-11-05` | GitHub |
+
+**Reanudar**: `gcloud compute instances start dbizi-vm`; Postgres arranca solo; `crontab deploy/crontab`;
+`python3 ingest_raw.py` rellena desde el crudo lo que falte; `PUBLICAR_HTML=1 publish_viz.sh` sin
+`--aviso` quita el cartel. Antes de volver a dejarla sola: 1 GB de swap y acotar
+`unattended-upgrades` (solo seguridad, en una ventana sin consultas pesadas). Desde cero, sin la VM:
+*Montar tu propia copia* más abajo, con los datos de la release.
 
 Estado a 2026-10-29 (montaje inicial del 2026-08-21). Coste: **0 €/mes**.
 
